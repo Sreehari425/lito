@@ -61,6 +61,7 @@ target_sources(
          src/command/error.cppm
          src/command/clean.cppm
          src/command/format.cppm
+         src/command/format_execution.cppm
          src/command/fetch.cppm
          src/command/install.cppm
          src/command/lock.cppm

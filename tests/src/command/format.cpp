@@ -1,4 +1,5 @@
 #include <rstd/test/gtest.hpp>
+#include <atomic>
 
 import rstd;
 import rstd.test;
@@ -13,6 +14,120 @@ using PathBuf = rstd::path::PathBuf;
 using namespace lito_test;
 
 class FormatCommand : public ProjectFixture {};
+
+TEST(FormatExecution, BoundsWorkersAndFallsBack) {
+    EXPECT_EQ(lito::format_execution::worker_count(usize(20), Some(usize(64))), usize(4));
+    EXPECT_EQ(lito::format_execution::worker_count(usize(2), Some(usize(64))), usize(2));
+    EXPECT_EQ(lito::format_execution::worker_count(usize(20), None()), usize(1));
+    EXPECT_EQ(lito::format_execution::worker_count(usize(20), Some(usize(1))), usize(1));
+    EXPECT_EQ(lito::format_execution::worker_count(usize {}, Some(usize(64))), usize {});
+    auto empty =
+        lito::format_execution::run(usize {}, usize(4), [](usize) -> lito::CommandResult<bool> {
+            ADD_FAILURE();
+            return Ok(true);
+        });
+    ASSERT_TRUE(empty.is_ok());
+    EXPECT_TRUE(empty->is_empty());
+}
+
+TEST(FormatExecution, OverlapsBoundedWorkAndKeepsResultOrder) {
+    std::atomic<unsigned> entered { 0 };
+    std::atomic<unsigned> active { 0 };
+    std::atomic<unsigned> maximum { 0 };
+    auto                  result = lito::format_execution::run(
+        usize(12), usize(64), [&](usize index) -> lito::CommandResult<bool> {
+            auto current  = active.fetch_add(1) + 1;
+            auto previous = maximum.load();
+            while (previous < current && ! maximum.compare_exchange_weak(previous, current)) {
+            }
+            if (index < usize(4)) {
+                entered.fetch_add(1);
+                auto started = rstd::time::Instant::now();
+                while (entered.load() < 4) {
+                    if (started.elapsed() > rstd::time::Duration::from_secs(rstd::u64(30))) {
+                        active.fetch_sub(1);
+                        return Err(lito::CommandError::Message(
+                            String::make("concurrency barrier timed out"_str)));
+                    }
+                    rstd::thread::yield_now();
+                }
+            }
+            active.fetch_sub(1);
+            return Ok(index % usize(2) == usize {});
+        });
+    ASSERT_TRUE(result.is_ok());
+    EXPECT_EQ(maximum.load(), 4u);
+    EXPECT_EQ(active.load(), 0u);
+    ASSERT_EQ(result->len(), usize(12));
+    for (usize index {}; index < result->len(); ++index) {
+        EXPECT_EQ((*result)[index], index % usize(2) == usize {});
+    }
+}
+
+TEST(FormatExecution, DrainsSubmittedTasksAndChoosesEarliestError) {
+    std::atomic<unsigned> entered { 0 };
+    std::atomic<unsigned> finished { 0 };
+    std::atomic<bool>     later_failed { false };
+    auto                  result = lito::format_execution::run(
+        usize(20), usize(2), [&](usize index) -> lito::CommandResult<bool> {
+            entered.fetch_add(1);
+            if (index == usize {}) {
+                auto started = rstd::time::Instant::now();
+                while (! later_failed.load()) {
+                    if (started.elapsed() > rstd::time::Duration::from_secs(rstd::u64(30))) {
+                        return Err(lito::CommandError::Message(
+                            String::make("error barrier timed out"_str)));
+                    }
+                    rstd::thread::yield_now();
+                }
+            } else {
+                later_failed.store(true);
+            }
+            finished.fetch_add(1);
+            return Err(lito::CommandError::Message(rstd::format("failure {}", index)));
+        });
+    ASSERT_TRUE(result.is_err());
+    EXPECT_EQ(entered.load(), 2u);
+    EXPECT_EQ(finished.load(), 2u);
+    EXPECT_EQ(rstd::format("{}", result.unwrap_err()).as_str(), "failure 0"_str);
+}
+
+TEST(FormatExecution, SingleWorkerStopsAtFailure) {
+    auto calls  = usize {};
+    auto result = lito::format_execution::run(
+        usize(8), usize(1), [&](usize index) -> lito::CommandResult<bool> {
+            ++calls;
+            if (index == usize(2))
+                return Err(lito::CommandError::Message(String::make("failed"_str)));
+            return Ok(false);
+        });
+    EXPECT_TRUE(result.is_err());
+    EXPECT_EQ(calls, usize(3));
+}
+
+TEST(FormatExecution, ReordersCompletionsByInputIndex) {
+    std::atomic<bool> replenished { false };
+    auto              result = lito::format_execution::run(
+        usize(3), usize(2), [&](usize index) -> lito::CommandResult<bool> {
+            if (index == usize {}) {
+                auto started = rstd::time::Instant::now();
+                while (! replenished.load()) {
+                    if (started.elapsed() > rstd::time::Duration::from_secs(rstd::u64(30))) {
+                        return Err(lito::CommandError::Message(
+                            String::make("completion barrier timed out"_str)));
+                    }
+                    rstd::thread::yield_now();
+                }
+            }
+            if (index == usize(2)) replenished.store(true);
+            return Ok(index != usize(1));
+        });
+    ASSERT_TRUE(result.is_ok());
+    ASSERT_EQ(result->len(), usize(3));
+    EXPECT_TRUE((*result)[usize {}]);
+    EXPECT_FALSE((*result)[usize(1)]);
+    EXPECT_TRUE((*result)[usize(2)]);
+}
 
 TEST_F(FormatCommand, FormatsLocalProjectWithoutResolvingDependencies) {
     auto tree = environment_tool_project_tree();
@@ -93,4 +208,46 @@ sources = ["main.cpp"]
     });
     ASSERT_TRUE(clean.is_ok());
     EXPECT_TRUE(clean->success());
+
+    auto test_manifest = tests.join(PathBuf::from("lito.toml"_str).as_path());
+    ASSERT_TRUE(rstd::fs::write(test_manifest.as_path(), R"toml([package]
+name = "fixture-format-tests"
+version = "0.1.0"
+source-root = ".."
+
+[[test]]
+link-stdlib = false
+name = "fixture-format-tests"
+sources = ["src/main.cpp", "tests/main.cpp"]
+)toml"_str.as_bytes())
+                    .is_ok());
+    ASSERT_TRUE(rstd::fs::write(source.as_path(), unformatted.as_bytes()).is_ok());
+    auto duplicate_config = lito::config::load_project_config(fixture.as_path());
+    ASSERT_TRUE(duplicate_config.is_ok());
+    auto duplicate = lito::format(lito::FormatRequest {
+        .root        = fixture.clone(),
+        .environment = rstd::move(duplicate_config->environment),
+        .tools       = rstd::move(duplicate_config->tools),
+        .mode        = lito::FormatMode::Check,
+    });
+    if (duplicate.is_err()) rstd::io::eprintln("{}", error_chain_text(duplicate.unwrap_err()));
+    ASSERT_TRUE(duplicate.is_ok());
+    EXPECT_EQ(duplicate->packages, usize(2));
+    EXPECT_EQ(duplicate->files, usize(2));
+    ASSERT_EQ(duplicate->unformatted_files.len(), usize(1));
+    EXPECT_EQ(duplicate->unformatted_files[usize {}].as_path(), source.as_path());
+
+    ASSERT_TRUE(rstd::fs::remove_file(tests.join(PathBuf::from("main.cpp"_str).as_path()).as_path())
+                    .is_ok());
+    auto missing_config = lito::config::load_project_config(fixture.as_path());
+    ASSERT_TRUE(missing_config.is_ok());
+    auto missing = lito::format(lito::FormatRequest {
+        .root        = fixture.clone(),
+        .environment = rstd::move(missing_config->environment),
+        .tools       = rstd::move(missing_config->tools),
+    });
+    EXPECT_TRUE(missing.is_err());
+    auto not_written = rstd::fs::read_to_string(source.as_path());
+    ASSERT_TRUE(not_written.is_ok());
+    EXPECT_EQ(not_written->as_str(), unformatted);
 }
