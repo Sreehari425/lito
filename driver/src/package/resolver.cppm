@@ -628,19 +628,15 @@ class PackageGraphResolver {
 
     auto package_has_proc_macro(const lito::manifest::PackageManifest& package) const noexcept
         -> bool {
-        for (const auto& target : package.targets) {
-            if (lito::manifest::package_target_kind(target) == PackageTargetKind::ProcMacro)
-                return true;
-        }
-        return false;
+        return package.targets.iter().any([&](auto target) {
+            return lito::manifest::package_target_kind((*target)) == PackageTargetKind::ProcMacro;
+        });
     }
 
     auto package_has_plugin(const lito::manifest::PackageManifest& package) const noexcept -> bool {
-        for (const auto& target : package.targets) {
-            if (lito::manifest::package_target_kind(target) == PackageTargetKind::Plugin)
-                return true;
-        }
-        return false;
+        return package.targets.iter().any([&](auto target) {
+            return lito::manifest::package_target_kind((*target)) == PackageTargetKind::Plugin;
+        });
     }
 
     auto validate_pmacro_support_contract(const lito::manifest::DeclaredDependency& declaration,
@@ -904,14 +900,24 @@ public:
     }
 
     auto package_names(usize source) const -> Vec<String> {
-        auto result = Vec<String>::with_capacity(catalog(source).names().len());
-        for (const auto& name : catalog(source).names()) result.push(name.clone());
+        auto result = catalog(source)
+                          .names()
+                          .iter()
+                          .map([](auto name) {
+                              return name->clone();
+                          })
+                          .collect<Vec<String>>();
         return result;
     }
 
     auto default_package_names(usize source) const -> Vec<String> {
-        auto result = Vec<String>::with_capacity(catalog(source).default_names().len());
-        for (const auto& name : catalog(source).default_names()) result.push(name.clone());
+        auto result = catalog(source)
+                          .default_names()
+                          .iter()
+                          .map([](auto name) {
+                              return name->clone();
+                          })
+                          .collect<Vec<String>>();
         return result;
     }
 

@@ -20,8 +20,11 @@ export namespace lito::tools::cmake
 {
 
 auto json_strings(const Vec<String>& values) -> Json {
-    auto result = JsonArray::with_capacity(values.len());
-    for (const auto& value : values) result.push(Json::String(value.clone()));
+    auto result = values.iter()
+                      .map([](auto value) {
+                          return Json::String(value->clone());
+                      })
+                      .collect<JsonArray>();
     return Json::Array(rstd::move(result));
 }
 
@@ -33,8 +36,11 @@ auto snapshot_json(const CMakeTargetUsageSnapshot& snapshot) -> Json {
 }
 
 auto usage_snapshot_json(const CMakeUsageSnapshot& snapshot) -> Json {
-    auto targets = JsonArray::with_capacity(snapshot.targets.len());
-    for (const auto& target : snapshot.targets) targets.push(snapshot_json(target));
+    auto targets  = snapshot.targets.iter()
+                        .map([](auto target) {
+                           return snapshot_json((*target));
+                        })
+                        .collect<JsonArray>();
     auto document = JsonMap::make();
     document.insert(String::make("version"_str), Json::String(snapshot.version.clone()));
     document.insert(String::make("targets"_str), Json::Array(rstd::move(targets)));

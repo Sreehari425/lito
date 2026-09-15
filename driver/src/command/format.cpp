@@ -96,8 +96,12 @@ auto format(const FormatRequest& request) -> CommandResult<FormatSummary> {
     auto       summary = FormatSummary {};
     const auto format_catalog =
         [&](lito::workspace::WorkspaceCatalog& catalog) -> CommandResult<empty> {
-        auto names = Vec<String>::with_capacity(catalog.names().len());
-        for (const auto& name : catalog.names()) names.push(name.clone());
+        auto names = catalog.names()
+                         .iter()
+                         .map([](auto name) {
+                             return name->clone();
+                         })
+                         .collect<Vec<String>>();
         for (const auto& name : names) {
             if (! selected.contains_key(name.as_str())) continue;
             auto package = catalog.take_package(name.as_str());

@@ -81,8 +81,11 @@ auto ScriptModuleCatalog::make(ref<rstd::path::Path>            root,
     -> PackageResult<ScriptModuleCatalog> {
     auto catalog           = ScriptModuleCatalog {};
     catalog.host_          = host;
-    auto root_dependencies = Vec<String>::with_capacity(dependencies.len());
-    for (const auto& dependency : dependencies) root_dependencies.push(dependency.clone());
+    auto root_dependencies = rstd::iter::from_slice(dependencies)
+                                 .map([](auto dependency) {
+                                     return dependency->clone();
+                                 })
+                                 .collect<Vec<String>>();
     catalog.owners_.push(Owner {
         .identity     = String::make(owner_identity),
         .root         = PathBuf::from(root),

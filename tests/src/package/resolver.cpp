@@ -876,6 +876,43 @@ sources = ["main.cpp"]
 }
 
 TEST_F(PackageResolver, ResolvesBuiltinScriptPackagesThroughRequiredDependencies) {
+    struct BuiltinScriptProvider {
+        lito::registry::RegistryReleaseId                   release;
+        Option<lito::registry::ResolvedRegistryGraphSource> resolved;
+        usize                                               builtin_calls {};
+        usize                                               registry_calls {};
+
+        static auto resolve_builtin(void* context, ref<str> id) noexcept
+            -> lito::registry::RegistryGraphResult<lito::registry::BuiltinRegistryPackage> {
+            auto& self = *static_cast<BuiltinScriptProvider*>(context);
+            ++self.builtin_calls;
+            EXPECT_EQ(id, "qt"_str);
+            return Ok(lito::registry::BuiltinRegistryPackage { .release = self.release.clone() });
+        }
+
+        static auto resolve(void*                                           context,
+                            slice<lito::registry::RegistryGraphRequirement> requirements) noexcept
+            -> lito::registry::RegistryGraphResult<
+                Vec<lito::registry::ResolvedRegistryGraphSource>> {
+            auto& self = *static_cast<BuiltinScriptProvider*>(context);
+            ++self.registry_calls;
+            if (requirements.len() != usize(1) || self.resolved.is_none()) {
+                return Err(lito::registry::RegistryGraphError {
+                    .message = String::make("unexpected fixture Registry request"_str),
+                });
+            }
+            const auto& requirement = requirements[usize {}];
+            EXPECT_EQ(requirement.package, self.release.package.name);
+            EXPECT_TRUE(requirement.registry.is_some());
+            if (requirement.registry.is_some())
+                EXPECT_EQ(requirement.registry->as_str(), self.release.package.registry.as_str());
+            EXPECT_EQ(requirement.requirement.text(), "=0.1.0"_str);
+            auto result = Vec<lito::registry::ResolvedRegistryGraphSource>::make();
+            result.push(self.resolved.take().unwrap());
+            return Ok(rstd::move(result));
+        }
+    };
+
     const ProjectFile files[] = {
         { "lito.toml"_str, R"toml([package]
 name = "fixture-script-consumer"
@@ -894,7 +931,63 @@ builtin = "qt"
     };
     auto project = materialize("builtin-script-dependency"_str, files);
     ASSERT_TRUE(project.is_ok());
-    auto graph = lito::package::resolve_package_graph(project->root.as_path());
+    const ProjectFile script_files[] = {
+        { "lito.toml"_str, R"toml([package]
+name = "lito-qt"
+version = "0.1.0"
+
+[script]
+supports = ["build"]
+)toml"_str },
+        { "lib.lua"_str, "return {}\n"_str },
+    };
+    auto script_project = materialize("builtin-script-provider"_str, script_files);
+    ASSERT_TRUE(script_project.is_ok());
+    auto manifest = lito::manifest::load_package_manifest(script_project->root.as_path());
+    ASSERT_TRUE(manifest.is_ok());
+    auto package_view = lito::workspace::WorkspaceCatalog::single(rstd::move(manifest).unwrap());
+    ASSERT_TRUE(package_view.is_ok());
+    auto pin = lito::registry::RegistryReleasePin {
+        .release = {
+            .package = {
+                .registry = lito::registry::RegistryId::parse("https://example.invalid/"_str).unwrap(),
+                .name = lito::registry::RegistryPackageName::parse("lito-qt"_str).unwrap(),
+            },
+            .version = lito::registry::SemanticVersion::parse("0.1.0"_str).unwrap(),
+        },
+        .checksum = lito::registry::PackageChecksum::parse(
+            "0000000000000000000000000000000000000000000000000000000000000000"_str).unwrap(),
+    };
+    auto fixture = BuiltinScriptProvider {
+        .release = pin.release.clone(),
+        .resolved = Some(lito::registry::ResolvedRegistryGraphSource {
+            .package = pin.release.package.clone(),
+            .version = pin.release.version.clone(),
+            .source = {
+                .identity = lito::source::registry_source_identity(pin),
+                .kind = lito::source::PackageSourceKind::Registry,
+                .root_directory = script_project->root.clone(),
+                .registry = Some(pin.clone()),
+            },
+            .catalog = rstd::move(package_view).unwrap(),
+        }),
+    };
+    auto environment = ResolvedProcessEnvironment::resolve(ProcessEnvironmentSpec {});
+    ASSERT_TRUE(environment.is_ok());
+    auto tools = lito::tools::ToolResolver(*environment);
+    auto graph = lito::package::resolve_package_graph_with_environment(
+        project->root.as_path(),
+        {},
+        tools,
+        *environment,
+        usize(1),
+        {},
+        None(),
+        lito::registry::RegistryGraphProvider {
+            .context         = &fixture,
+            .resolve         = BuiltinScriptProvider::resolve,
+            .resolve_builtin = BuiltinScriptProvider::resolve_builtin,
+        });
     if (graph.is_err()) {
         auto message = error_chain_text(rstd::move(graph).unwrap_err());
         rstd::test::fail_current(message.as_str(), __FILE__, __LINE__, true);
@@ -919,9 +1012,14 @@ builtin = "qt"
     EXPECT_EQ(script.require_name.as_str(), "@lito.qt"_str);
     ASSERT_EQ(script.supports.len(), usize(1));
     EXPECT_EQ(script.supports[usize {}], lito::manifest::ScriptHostKind::Build);
-    EXPECT_EQ(provider->source.kind, lito::source::PackageSourceKind::Builtin);
-    EXPECT_EQ(provider->source.builtin.as_str(), "qt"_str);
-    EXPECT_TRUE(provider->embedded_source.is_some());
+    EXPECT_EQ(provider->source.kind, lito::source::PackageSourceKind::Registry);
+    ASSERT_TRUE(provider->source.registry.is_some());
+    EXPECT_EQ(provider->source.registry->release, pin.release);
+    EXPECT_EQ(provider->source.identity, lito::source::registry_source_identity(pin));
+    EXPECT_FALSE(provider->embedded_source.is_some());
+    EXPECT_TRUE(fixture.builtin_calls > usize {});
+    EXPECT_EQ(fixture.registry_calls, usize(1));
+    EXPECT_TRUE(fixture.resolved.is_none());
 }
 
 TEST_F(PackageResolver, RejectsCppFieldsOnScriptDependencyContracts) {

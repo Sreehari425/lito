@@ -146,8 +146,11 @@ struct ProjectProfile {
     Vec<BuildProfileDefinition> build_profiles;
 
     auto clone() const -> ProjectProfile {
-        auto profiles = Vec<BuildProfileDefinition>::with_capacity(build_profiles.len());
-        for (const auto& profile : build_profiles) profiles.push(profile.clone());
+        auto profiles = build_profiles.iter()
+                            .map([](auto profile) {
+                                return profile->clone();
+                            })
+                            .collect<Vec<BuildProfileDefinition>>();
         return ProjectProfile {
             .base           = base,
             .build_profiles = rstd::move(profiles),

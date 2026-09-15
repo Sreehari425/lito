@@ -284,10 +284,9 @@ auto clone_acquired_source(const lito::source::AcquiredSource& source)
 }
 
 auto package_selected(const Vec<String>& selected, ref<str> package) -> bool {
-    for (const auto& name : selected) {
-        if (name == package) return true;
-    }
-    return false;
+    return selected.iter().any([&](auto name) {
+        return (*name) == package;
+    });
 }
 
 auto validate_cmake_build_overrides(const lito::package::ResolvedPackageGraph&     graph,

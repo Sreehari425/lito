@@ -321,10 +321,9 @@ auto visit_link_target(const PackageMetadata& package,
 }
 
 auto external_has_public_link_usage(const ResolvedExternalDependency& dependency) -> bool {
-    for (const auto& target : dependency.targets) {
-        if (target.consumption.is_public && target.consumption.usage.uses_link()) return true;
-    }
-    return false;
+    return dependency.targets.iter().any([&](auto target) {
+        return target->consumption.is_public && target->consumption.usage.uses_link();
+    });
 }
 
 auto resolve_import_requirements(const PackageMetadata& package,
@@ -1252,11 +1251,11 @@ auto resolve_native_targets(const PackageMetadata& package, SourceTargetSelectio
         }
     }
 
-    auto target_identities =
-        Vec<lito::package::PackageTargetId>::with_capacity(package.targets.len());
-    for (const auto& target : package.targets) {
-        target_identities.push(target.id.clone());
-    }
+    auto target_identities = package.targets.iter()
+                                 .map([](auto target) {
+                                     return target->id.clone();
+                                 })
+                                 .collect<Vec<lito::package::PackageTargetId>>();
     return Ok(ResolvedNativeTargetPlan {
         .profile           = profile,
         .target_identities = rstd::move(target_identities),
@@ -1292,11 +1291,17 @@ auto snapshot_package_plan(const PackageSpec& package, const ResolvedNativeTarge
                 "source discovery target order changed during finalization"_str);
         }
     }
-    auto contexts = Vec<CompileContext>::with_capacity(discovery.contexts.len());
-    for (const auto& context : discovery.contexts) contexts.push(context.clone());
+    auto       contexts      = discovery.contexts.iter()
+                                   .map([](auto context) {
+                            return context->clone();
+                                   })
+                                   .collect<Vec<CompileContext>>();
     const auto clone_targets = [](const Vec<Vec<TargetId>>& source) {
-        auto result = Vec<Vec<TargetId>>::with_capacity(source.len());
-        for (const auto& targets : source) result.push(targets.clone());
+        auto result = source.iter()
+                          .map([](auto targets) {
+                              return targets->clone();
+                          })
+                          .collect<Vec<Vec<TargetId>>>();
         return result;
     };
     auto link_inputs = Vec<Vec<PlannedLinkInput>>::with_capacity(discovery.link_inputs.len());
@@ -1310,15 +1315,16 @@ auto snapshot_package_plan(const PackageSpec& package, const ResolvedNativeTarge
         }
         link_inputs.push(rstd::move(cloned));
     }
-    auto link_requirements =
-        Vec<lito::link::Requirements>::with_capacity(discovery.link_requirements.len());
-    for (const auto& requirements : discovery.link_requirements) {
-        link_requirements.push(requirements.clone());
-    }
-    auto linker_options = Vec<Vec<String>>::with_capacity(discovery.linker_options.len());
-    for (const auto& options : discovery.linker_options) {
-        linker_options.push(as<Clone>(options).clone());
-    }
+    auto link_requirements = discovery.link_requirements.iter()
+                                 .map([](auto requirements) {
+                                     return requirements->clone();
+                                 })
+                                 .collect<Vec<lito::link::Requirements>>();
+    auto linker_options    = discovery.linker_options.iter()
+                                 .map([](auto options) {
+                                  return as<Clone>((*options)).clone();
+                                 })
+                                 .collect<Vec<Vec<String>>>();
     return Ok(PackagePlan {
         .package           = rstd::addressof(package),
         .profile           = rstd::addressof(package.profiles[discovery.profile]),

@@ -479,8 +479,7 @@ auto lito::registry::registry_candidate_has_external_inputs(
         ! manifest.workspace_cargo_external_dependencies.is_empty()) {
         return true;
     }
-    for (const auto& group : manifest.source_groups) {
-        if (group.external_source.is_some()) return true;
-    }
-    return false;
+    return manifest.source_groups.iter().any([&](auto group) {
+        return group->external_source.is_some();
+    });
 }

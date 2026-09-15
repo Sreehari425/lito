@@ -115,11 +115,11 @@ auto lito::package::EmbeddedRegistryPackages::resolve(ref<str> id)
         return embedded_failure<lito::registry::BuiltinRegistryPackage>(
             descriptor_error(id, "descriptor does not describe the embedded archive"_str));
     }
-    auto dependencies = Vec<lito::registry::RegistryDependencyProjection>::with_capacity(
-        descriptor->dependencies.len());
-    for (const auto& dependency : descriptor->dependencies) {
-        dependencies.push(dependency.clone());
-    }
+    auto dependencies = descriptor->dependencies.iter()
+                            .map([](auto dependency) {
+                                return dependency->clone();
+                            })
+                            .collect<Vec<lito::registry::RegistryDependencyProjection>>();
     auto index = lito::registry::RegistryPackageIndex::single(descriptor->package.clone(),
                                                               descriptor->version.clone(),
                                                               descriptor->archive.checksum.clone(),

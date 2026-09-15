@@ -33,9 +33,11 @@ struct SourceResolutionOptions {
                 .commit = source.commit.clone(),
             });
         }
-        auto registry_pins =
-            Vec<lito::registry::RegistryReleasePin>::with_capacity(registry_sources.len());
-        for (const auto& source : registry_sources) registry_pins.push(source.clone());
+        auto registry_pins = registry_sources.iter()
+                                 .map([](auto source) {
+                                     return source->clone();
+                                 })
+                                 .collect<Vec<lito::registry::RegistryReleasePin>>();
         return SourceResolutionOptions {
             .locked           = locked,
             .git              = git,

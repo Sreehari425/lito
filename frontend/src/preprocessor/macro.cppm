@@ -256,8 +256,11 @@ private:
 };
 
 auto clone_tokens(const Vec<Token>& input) -> Vec<Token> {
-    auto result = Vec<Token>::with_capacity(input.len());
-    for (const auto& token : input) result.push(token.clone());
+    auto result = input.iter()
+                      .map([](auto token) {
+                          return token->clone();
+                      })
+                      .collect<Vec<Token>>();
     return result;
 }
 
@@ -553,16 +556,23 @@ auto MacroDefinition::compile_range(usize token_begin, usize token_end) -> void 
 auto MacroDefinition::cloned_parameters() const -> Option<Vec<String>> {
     auto copied_parameters = Option<Vec<String>> {};
     if (parameters.is_some()) {
-        auto values = Vec<String>::with_capacity(parameters->len());
-        for (const auto& parameter : *parameters) values.push(parameter.clone());
+        auto values       = (*parameters)
+                                .iter()
+                                .map([](auto parameter) {
+                              return parameter->clone();
+                                })
+                                .collect<Vec<String>>();
         copied_parameters = Some(rstd::move(values));
     }
     return copied_parameters;
 }
 
 auto MacroDefinition::copied_replacement() const -> Vec<Token> {
-    auto copied_replacement = Vec<Token>::with_capacity(replacement.len());
-    for (const auto& token : replacement) copied_replacement.push(token.clone());
+    auto copied_replacement = replacement.iter()
+                                  .map([](auto token) {
+                                      return token->clone();
+                                  })
+                                  .collect<Vec<Token>>();
     return copied_replacement;
 }
 

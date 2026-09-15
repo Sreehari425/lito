@@ -180,10 +180,9 @@ auto file_stem(ref<rstd::path::Path> path) -> ManifestSchemaResult<String> {
 }
 
 auto explicit_benchmark_name(const Vec<PackageTargetManifest>& targets, ref<str> name) -> bool {
-    for (const auto& target : targets) {
-        if (target.is_Benchmark() && target.as_Benchmark().name.as_str() == name) return true;
-    }
-    return false;
+    return targets.iter().any([&](auto target) {
+        return target->is_Benchmark() && target->as_Benchmark().name.as_str() == name;
+    });
 }
 
 auto discover_conventional_benchmarks(ref<rstd::path::Path>             package_root,

@@ -188,10 +188,9 @@ auto fixed_directory(ref<str> name, ref<str> portable) noexcept -> bool {
 
 auto under_policy_root(ref<rstd::path::Path> path, const PackagePublishPolicy& policy) noexcept
     -> bool {
-    for (const auto& root : policy.excluded_roots) {
-        if (path.starts_with(root.as_path())) return true;
-    }
-    return false;
+    return policy.excluded_roots.iter().any([&](auto root) {
+        return path.starts_with(root->as_path());
+    });
 }
 
 auto is_archive_path(ref<rstd::path::Path> path, const PackagePublishPolicy& policy) noexcept
@@ -232,13 +231,9 @@ auto nested_manifest(ref<rstd::path::Path> directory) -> PackageFileSetResult<bo
 auto explicit_pattern_crosses_nested(const FileSetState& state, ref<str> portable) noexcept
     -> bool {
     auto root = split_components(portable);
-    for (const auto& pattern : state.includes) {
-        if (glob_can_target_descendant(pattern.components, root)) return true;
-    }
-    for (const auto& pattern : state.excludes) {
-        if (glob_can_target_descendant(pattern.components, root)) return true;
-    }
-    return false;
+    return state.includes.iter().chain(state.excludes.iter()).any([&](auto pattern) {
+        return glob_can_target_descendant(pattern->components, root);
+    });
 }
 
 auto selected_by_patterns(FileSetState& state, ref<str> portable) -> bool {

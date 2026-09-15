@@ -19,17 +19,15 @@ public:
     explicit constexpr ValidSymbols(slice<SymbolId> symbols) noexcept: symbols_(symbols) {}
 
     constexpr auto contains(SymbolId symbol) const noexcept -> bool {
-        for (auto candidate : symbols_) {
-            if (candidate == symbol) return true;
-        }
-        return false;
+        return rstd::iter::from_slice(symbols_).any([&](auto candidate) {
+            return *candidate == symbol;
+        });
     }
 
     constexpr auto belongs_to(LanguageId language) const noexcept -> bool {
-        for (auto symbol : symbols_) {
-            if (symbol.language() != language) return false;
-        }
-        return true;
+        return rstd::iter::from_slice(symbols_).all([&](auto symbol) {
+            return symbol->language() == language;
+        });
     }
 
     constexpr auto as_slice() const noexcept -> slice<SymbolId> { return symbols_; }

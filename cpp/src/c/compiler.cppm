@@ -84,12 +84,21 @@ struct CCompileOptions {
     Vec<CVendorOption>                   vendor;
 
     auto clone() const -> CCompileOptions {
-        auto includes = Vec<CIncludeDirectory>::with_capacity(include_directories.len());
-        for (const auto& include : include_directories) includes.push(include.clone());
-        auto copied_macros = Vec<CMacroDirective>::with_capacity(macros.len());
-        for (const auto& macro : macros) copied_macros.push(macro.clone());
-        auto copied_vendor = Vec<CVendorOption>::with_capacity(vendor.len());
-        for (const auto& option : vendor) copied_vendor.push(option.clone());
+        auto includes      = include_directories.iter()
+                                 .map([](auto include) {
+                                return include->clone();
+                                 })
+                                 .collect<Vec<CIncludeDirectory>>();
+        auto copied_macros = macros.iter()
+                                 .map([](auto macro) {
+                                     return macro->clone();
+                                 })
+                                 .collect<Vec<CMacroDirective>>();
+        auto copied_vendor = vendor.iter()
+                                 .map([](auto option) {
+                                     return option->clone();
+                                 })
+                                 .collect<Vec<CVendorOption>>();
         return CCompileOptions {
             .common              = common.clone(),
             .standard            = standard,
@@ -106,10 +115,16 @@ struct CPublicRequirements {
     Vec<CMacroDirective>   macros;
 
     auto clone() const -> CPublicRequirements {
-        auto includes = Vec<CIncludeDirectory>::with_capacity(include_directories.len());
-        for (const auto& include : include_directories) includes.push(include.clone());
-        auto copied_macros = Vec<CMacroDirective>::with_capacity(macros.len());
-        for (const auto& macro : macros) copied_macros.push(macro.clone());
+        auto includes      = include_directories.iter()
+                                 .map([](auto include) {
+                                return include->clone();
+                                 })
+                                 .collect<Vec<CIncludeDirectory>>();
+        auto copied_macros = macros.iter()
+                                 .map([](auto macro) {
+                                     return macro->clone();
+                                 })
+                                 .collect<Vec<CMacroDirective>>();
         return CPublicRequirements {
             .include_directories = rstd::move(includes),
             .macros              = rstd::move(copied_macros),
@@ -174,11 +189,11 @@ struct CArgumentLayer {
     Vec<CCompilerArgumentOccurrence> occurrences;
 
     auto clone() const -> CArgumentLayer {
-        auto copied_occurrences =
-            Vec<CCompilerArgumentOccurrence>::with_capacity(occurrences.len());
-        for (const auto& occurrence : occurrences) {
-            copied_occurrences.push(occurrence.clone());
-        }
+        auto copied_occurrences = occurrences.iter()
+                                      .map([](auto occurrence) {
+                                          return occurrence->clone();
+                                      })
+                                      .collect<Vec<CCompilerArgumentOccurrence>>();
         return CArgumentLayer {
             .include_directories = as<Clone>(include_directories).clone(),
             .definitions         = as<Clone>(definitions).clone(),

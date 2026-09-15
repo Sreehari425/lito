@@ -88,8 +88,11 @@ auto package_selection_failure(ref<str> message) -> PackageSelectionResult<T> {
 }
 
 auto copy_strings(const Vec<String>& values) -> Vec<String> {
-    auto result = Vec<String>::with_capacity(values.len());
-    for (const auto& value : values) result.push(value.clone());
+    auto result = values.iter()
+                      .map([](auto value) {
+                          return value->clone();
+                      })
+                      .collect<Vec<String>>();
     return result;
 }
 
@@ -629,10 +632,9 @@ auto resolve_plugin_host_selection(ResolvedPackageSelection selection)
         }
     }
     const auto has_selected = [&selected_targets](ref<str> name, PackageTargetKind kind) noexcept {
-        for (const auto& target : selected_targets) {
-            if (target.package == name && target.kind == kind) return true;
-        }
-        return false;
+        return selected_targets.iter().any([&](auto target) {
+            return target->package == name && target->kind == kind;
+        });
     };
     for (const auto& name : selection.plugin_package_names) {
         if (! has_selected(name.as_str(), PackageTargetKind::Plugin)) {

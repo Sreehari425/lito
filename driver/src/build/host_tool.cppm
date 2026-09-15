@@ -34,10 +34,9 @@ auto host_tool_io_failure(ref<str>               operation,
 }
 
 auto requested_package(const Vec<String>& packages, ref<str> name) noexcept -> bool {
-    for (const auto& package : packages) {
-        if (package == name) return true;
-    }
-    return false;
+    return packages.iter().any([&](auto package) {
+        return (*package) == name;
+    });
 }
 
 auto executable_digest(ref<rstd::path::Path> path) -> HostBuildToolResult<String> {

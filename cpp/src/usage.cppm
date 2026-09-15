@@ -123,10 +123,16 @@ struct ExternalDependencyUsage {
     String                       identity;
 
     auto clone() const -> ExternalDependencyUsage {
-        auto copied_targets = Vec<ExternalTargetUsage>::with_capacity(targets.len());
-        for (const auto& target : targets) copied_targets.push(target.clone());
-        auto copied_tools = Vec<ExternalHostToolUsage>::with_capacity(host_tools.len());
-        for (const auto& tool : host_tools) copied_tools.push(tool.clone());
+        auto copied_targets = targets.iter()
+                                  .map([](auto target) {
+                                      return target->clone();
+                                  })
+                                  .collect<Vec<ExternalTargetUsage>>();
+        auto copied_tools   = host_tools.iter()
+                                  .map([](auto tool) {
+                                    return tool->clone();
+                                  })
+                                  .collect<Vec<ExternalHostToolUsage>>();
         return ExternalDependencyUsage {
             .alias              = alias.clone(),
             .provider           = provider.clone(),
@@ -171,10 +177,16 @@ struct ResolvedExternalDependency {
     String                           identity;
 
     auto clone() const -> ResolvedExternalDependency {
-        auto copied_targets = Vec<ResolvedExternalTargetUsage>::with_capacity(targets.len());
-        for (const auto& target : targets) copied_targets.push(target.clone());
-        auto copied_tools = Vec<ExternalHostToolUsage>::with_capacity(host_tools.len());
-        for (const auto& tool : host_tools) copied_tools.push(tool.clone());
+        auto copied_targets = targets.iter()
+                                  .map([](auto target) {
+                                      return target->clone();
+                                  })
+                                  .collect<Vec<ResolvedExternalTargetUsage>>();
+        auto copied_tools   = host_tools.iter()
+                                  .map([](auto tool) {
+                                    return tool->clone();
+                                  })
+                                  .collect<Vec<ExternalHostToolUsage>>();
         return ResolvedExternalDependency {
             .alias              = alias.clone(),
             .provider           = provider.clone(),

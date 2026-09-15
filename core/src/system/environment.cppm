@@ -254,10 +254,11 @@ public:
         return result;
     }
     auto clone() const -> ResolvedProcessEnvironment {
-        auto extensions = Vec<rstd::ffi::OsString>::with_capacity(executable_extensions_.len());
-        for (const auto& extension : executable_extensions_) {
-            extensions.push(rstd::ffi::OsString::from(extension.as_os_str()));
-        }
+        auto extensions = executable_extensions_.iter()
+                              .map([](auto extension) {
+                                  return rstd::ffi::OsString::from(extension->as_os_str());
+                              })
+                              .collect<Vec<rstd::ffi::OsString>>();
         auto result = ResolvedProcessEnvironment(as<Clone>(directories_).clone(),
                                                  rstd::ffi::OsString::from(child_path_.as_os_str()),
                                                  rstd::move(extensions));

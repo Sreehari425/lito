@@ -45,10 +45,9 @@ auto command_source_result(
 }
 
 auto selected_package(const Vec<String>& selected, ref<str> package) noexcept -> bool {
-    for (const auto& name : selected) {
-        if (name == package) return true;
-    }
-    return false;
+    return selected.iter().any([&](auto name) {
+        return (*name) == package;
+    });
 }
 
 auto source_for(const PreparedExternalDependencySources& sources, usize package, ref<str> name)
@@ -194,10 +193,9 @@ auto append_git_bundle_entry(Vec<GitBundleEntry>&                       entries,
 auto builtin_package_source(const lito::package::ResolvedPackageGraph& graph,
                             const lito::source::ResolvedPackageSource& source) noexcept -> bool {
     if (source.registry.is_none()) return false;
-    for (const auto& package : graph.builtin_packages) {
-        if (package.as_str() == source.registry->release.package.name.as_str()) return true;
-    }
-    return false;
+    return graph.builtin_packages.iter().any([&](auto package) {
+        return package->as_str() == source.registry->release.package.name.as_str();
+    });
 }
 
 auto fetch_entry_count(const lito::package::ResolvedPackageGraph&          graph,
@@ -620,12 +618,12 @@ auto fetch_dependencies(const FetchRequest& request) -> CommandResult<FetchSumma
                          rstd::move(host_archives).unwrap_err()));
     }
     for (auto& archive : *host_archives) archive_requests.push(rstd::move(archive));
-    auto acquisition_requests =
-        Vec<lito::source::ArchiveSourceFetchRequest>::with_capacity(archive_requests.len());
-    for (const auto& archive : archive_requests) {
-        acquisition_requests.push(clone_archive_request(archive));
-    }
-    auto archive_files = rstd_try(command_source_result(
+    auto acquisition_requests = archive_requests.iter()
+                                    .map([](auto archive) {
+                                        return clone_archive_request((*archive));
+                                    })
+                                    .collect<Vec<lito::source::ArchiveSourceFetchRequest>>();
+    auto archive_files        = rstd_try(command_source_result(
         lito::source::cache_archive_frontier(rstd::move(acquisition_requests),
                                              request.jobs,
                                              resolver,

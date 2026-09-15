@@ -538,8 +538,11 @@ auto lito::registry::VersionRequirement::matches(const SemanticVersion& version)
 }
 
 auto lito::registry::VersionRequirement::clone() const -> VersionRequirement {
-    auto comparators = Vec<VersionComparator>::with_capacity(comparators_.len());
-    for (const auto& comparator : comparators_) comparators.push(comparator.clone());
+    auto comparators = comparators_.iter()
+                           .map([](auto comparator) {
+                               return comparator->clone();
+                           })
+                           .collect<Vec<VersionComparator>>();
     return VersionRequirement(text_.clone(),
                               rstd::move(comparators),
                               admits_prerelease_,

@@ -28,7 +28,9 @@ TEST_F(Workspace, WorkspaceNameIsRequiredAndValidatedByManifestOwner) {
     auto missing = lito::manifest::load_manifest_document(missing_project->root.as_path());
     ASSERT_TRUE(missing.is_err());
     auto missing_error = rstd::move(missing).unwrap_err();
-    EXPECT_TRUE(error_chain_text(missing_error).as_str().contains("missing 'name'"_str));
+    EXPECT_TRUE(error_chain_text(missing_error)
+                    .as_str()
+                    .contains("missing field: name at $.workspace.name"_str));
 
     auto invalid_project =
         manifest("name-invalid"_str, "[workspace]\nname = \"fixture.invalid\"\nmembers = []\n"_str);
@@ -349,12 +351,19 @@ workspace = true
 }
 
 TEST_F(Workspace, WorkspaceDependencyVersionShorthandRejectsUnsupportedShapes) {
-    constexpr ref<str> declarations[] = {
-        "dependency = \"\""_str,
-        "dependency = 1"_str,
+    struct InvalidDependency {
+        ref<str> declaration;
+        ref<str> expected;
+    };
+    constexpr InvalidDependency cases[] = {
+        { "dependency = \"\""_str,
+          "workspace dependency 'dependency'.version '' is not a supported Registry version requirement"_str },
+        { "dependency = 1"_str,
+          "type mismatch: expected map, found signed integer at $.workspace.dependencies.dependency"_str },
     };
     auto index = usize {};
-    for (auto declaration : declarations) {
+    for (const auto& item : cases) {
+        SCOPED_TRACE(item.declaration);
         auto contents = rstd::format(R"toml([workspace]
 name = "fixture-workspace-registry-shorthand-invalid-{}"
 members = ["app"]
@@ -363,15 +372,14 @@ members = ["app"]
 {}
 )toml",
                                      index,
-                                     declaration);
+                                     item.declaration);
         auto name     = rstd::format("workspace-registry-version-shorthand-invalid-{}", index);
         auto project  = manifest(name.as_str(), contents.as_str());
         ASSERT_TRUE(project.is_ok());
         auto loaded = lito::manifest::load_manifest_document(project->root.as_path());
         ASSERT_TRUE(loaded.is_err());
         auto error = rstd::move(loaded).unwrap_err();
-        EXPECT_TRUE(
-            error_chain_text(error).as_str().contains("workspace dependency 'dependency'"_str));
+        EXPECT_TRUE(error_chain_text(error).as_str().contains(item.expected));
         ++index;
     }
 }

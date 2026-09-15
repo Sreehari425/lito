@@ -308,24 +308,21 @@ public:
           process_environment_(rstd::addressof(process_environment)) {}
 
     auto predefined_macros() -> preprocessor::Result<Vec<preprocessor::PredefinedMacroOperation>> {
-        auto result = Vec<preprocessor::PredefinedMacroOperation>::with_capacity(
-            environment_.builtin_environment->definitions.len() +
-            environment_.native_definitions.len() + environment_.command_line_macros.len());
-        for (const auto& definition : environment_.builtin_environment->definitions) {
-            result.push(preprocessor::PredefinedMacroOperation::define(definition.clone()));
-        }
-        for (const auto& definition : environment_.native_definitions) {
-            result.push(preprocessor::PredefinedMacroOperation::define(definition.clone()));
-        }
-        for (const auto& operation : environment_.command_line_macros) {
-            if (operation.kind == preprocessor::PredefinedMacroOperationKind::Define) {
-                result.push(
-                    preprocessor::PredefinedMacroOperation::define(operation.definition->clone()));
-            } else {
-                result.push(
-                    preprocessor::PredefinedMacroOperation::undefine(operation.name.clone()));
-            }
-        }
+        auto definitions =
+            environment_.builtin_environment->definitions.iter()
+                .chain(environment_.native_definitions.iter())
+                .map([](auto definition) {
+                    return preprocessor::PredefinedMacroOperation::define(definition->clone());
+                });
+        auto command_line = environment_.command_line_macros.iter().map([](auto operation) {
+            if (operation->kind == preprocessor::PredefinedMacroOperationKind::Define)
+                return preprocessor::PredefinedMacroOperation::define(
+                    operation->definition->clone());
+            return preprocessor::PredefinedMacroOperation::undefine(operation->name.clone());
+        });
+        auto result       = rstd::move(definitions)
+                                .chain(rstd::move(command_line))
+                                .collect<Vec<preprocessor::PredefinedMacroOperation>>();
         return Ok(rstd::move(result));
     }
 

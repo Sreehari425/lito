@@ -61,10 +61,12 @@ struct TargetToolchainConfiguration : DefaultInClass<TargetToolchainConfiguratio
     String          identity;
 
     auto clone() const -> TargetToolchainConfiguration {
-        auto entries = Vec<CacheEntry>::with_capacity(cache.len());
-        for (const auto& entry : cache) {
-            entries.push(CacheEntry { .name = entry.name.clone(), .value = entry.value.clone() });
-        }
+        auto entries = cache.iter()
+                           .map([](auto entry) {
+                               return CacheEntry { .name  = entry->name.clone(),
+                                                   .value = entry->value.clone() };
+                           })
+                           .collect<Vec<CacheEntry>>();
         return TargetToolchainConfiguration {
             .file     = file.clone(),
             .cache    = rstd::move(entries),

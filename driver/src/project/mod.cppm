@@ -138,8 +138,11 @@ struct ProjectRegistryResolver {
             http       = http_owner->transport();
             blobs      = blob_owner->transport();
         }
-        auto pins = Vec<lito::registry::RegistryReleasePin>::with_capacity(self.locked.len());
-        for (const auto& pin : self.locked) pins.push(pin.clone());
+        auto pins   = self.locked.iter()
+                          .map([](auto pin) {
+                            return pin->clone();
+                          })
+                          .collect<Vec<lito::registry::RegistryReleasePin>>();
         auto client = lito::registry::RegistryGraphClient(PathBuf::from(data->root()),
                                                           *self.config,
                                                           self.network,
@@ -206,9 +209,11 @@ auto start_project_resolution(
             graph_policy.index = lito::registry::RegistryIndexUpdatePolicy::Refresh;
             graph_policy.refresh_on_incompatibility = false;
         }
-        auto pins = Vec<lito::registry::RegistryReleasePin>::with_capacity(
-            resolution.registry_sources.len());
-        for (const auto& pin : resolution.registry_sources) pins.push(pin.clone());
+        auto pins              = resolution.registry_sources.iter()
+                                     .map([](auto pin) {
+                            return pin->clone();
+                                     })
+                                     .collect<Vec<lito::registry::RegistryReleasePin>>();
         auto embedded          = Option<lito::package::EmbeddedRegistryPackages> {};
         auto embedded_provider = registries->embedded_packages();
         if (embedded_provider.resolve != nullptr) {

@@ -178,6 +178,36 @@ TEST_F(Manifest, TypedWorkspaceSchemasKeepDefinitionRestrictions) {
     }
 }
 
+TEST_F(Manifest, WorkspacePathsPreserveOrderAndFirstFailure) {
+    auto project = manifest("workspace-path-order"_str, R"toml([workspace]
+name = "paths"
+members = ["second", "first"]
+default-members = ["first", "second"]
+)toml"_str);
+    ASSERT_TRUE(project.is_ok());
+    auto loaded = lito::manifest::load_manifest_document(project->root.as_path());
+    ASSERT_TRUE(loaded.is_ok());
+    ASSERT_TRUE(loaded->workspace.is_some());
+    const auto& workspace = *loaded->workspace;
+    ASSERT_EQ(workspace.members.len(), usize(2));
+    EXPECT_EQ(workspace.members[usize {}].as_path(), PathBuf::from("second"_str).as_path());
+    EXPECT_EQ(workspace.members[usize(1)].as_path(), PathBuf::from("first"_str).as_path());
+    ASSERT_EQ(workspace.default_members.len(), usize(2));
+    EXPECT_EQ(workspace.default_members[usize {}].as_path(), PathBuf::from("first"_str).as_path());
+    EXPECT_EQ(workspace.default_members[usize(1)].as_path(), PathBuf::from("second"_str).as_path());
+
+    auto invalid_project = manifest("workspace-path-first-error"_str, R"toml([workspace]
+name = "paths"
+members = ["valid", "", "/invalid"]
+)toml"_str);
+    ASSERT_TRUE(invalid_project.is_ok());
+    auto invalid = lito::manifest::load_manifest_document(invalid_project->root.as_path());
+    ASSERT_TRUE(invalid.is_err());
+    auto error = error_chain_text(rstd::move(invalid).unwrap_err());
+    EXPECT_TRUE(error.as_str().contains("workspace.members must not be empty"_str));
+    EXPECT_FALSE(error.as_str().contains("must be a relative path"_str));
+}
+
 TEST_F(Manifest, TypedSchemasPreserveExplicitFalseEmptyAndLegacyScalarUsage) {
     auto project = manifest("schema-presence"_str, R"toml(
 [package]
@@ -1947,6 +1977,10 @@ source-groups = ["runtime"]
 condition = 'target.os == "linux"'
 source-groups = ["linux"]
 
+[[lib.when]]
+condition = 'target.os == "macos"'
+source-groups = ["runtime", "linux"]
+
 [usage]
 public-include-directories = [
   { external-source = "vendor", path = "src" },
@@ -1965,15 +1999,65 @@ public-include-directories = [
     const auto& source = lito::manifest::package_target_source(loaded->targets[usize {}]);
     ASSERT_EQ(source.source_groups.len(), usize(1));
     EXPECT_EQ(source.source_groups[usize {}].as_str(), "runtime"_str);
-    ASSERT_EQ(source.conditions.len(), usize(1));
+    ASSERT_EQ(source.conditions.len(), usize(2));
     EXPECT_EQ(source.conditions[usize {}].source.as_str(), "target.os == \"linux\""_str);
     ASSERT_EQ(source.conditions[usize {}].source_groups.len(), usize(1));
     EXPECT_EQ(source.conditions[usize {}].source_groups[usize {}].as_str(), "linux"_str);
+    EXPECT_EQ(source.conditions[usize(1)].source.as_str(), "target.os == \"macos\""_str);
+    ASSERT_EQ(source.conditions[usize(1)].source_groups.len(), usize(2));
+    EXPECT_EQ(source.conditions[usize(1)].source_groups[usize {}].as_str(), "runtime"_str);
+    EXPECT_EQ(source.conditions[usize(1)].source_groups[usize(1)].as_str(), "linux"_str);
     ASSERT_EQ(loaded->usage.public_include_directory_requirements.len(), usize(1));
     const auto& include = loaded->usage.public_include_directory_requirements[usize {}];
     EXPECT_EQ(include.root, lito::dependency::IncludeDirectoryRoot::ExternalSource);
     ASSERT_TRUE(include.external_source.is_some());
     EXPECT_EQ(include.external_source->as_str(), "vendor"_str);
+}
+
+TEST_F(Manifest, TargetConditionsPreserveFirstFailureAndIndex) {
+    struct InvalidCondition {
+        ref<str> declaration;
+        ref<str> diagnostic;
+    };
+    const InvalidCondition cases[] = {
+        { "condition = 'target.os =='\nsource-groups = ['runtime']"_str,
+          "lib.when[1].condition"_str },
+        { "condition = 'target.os == \"macos\"'\nsource-groups = ['runtime', 'runtime']"_str,
+          "lib.when[1].source-groups[1]"_str },
+        { "condition = 'target.os == \"macos\"'\nsource-groups = []"_str,
+          "lib.when[1].source-groups"_str },
+    };
+    auto index = usize {};
+    for (const auto& item : cases) {
+        SCOPED_TRACE(item.declaration);
+        auto contents = rstd::format(R"toml([package]
+name = "conditions"
+version = "0.1.0"
+[source-groups.runtime]
+sources = ["src/runtime.c"]
+[lib]
+name = "conditions"
+archive = "conditions"
+source-groups = ["runtime"]
+[[lib.when]]
+condition = 'target.os == "linux"'
+source-groups = ["runtime"]
+[[lib.when]]
+{}
+[[lib.when]]
+condition = 'target.os =='
+source-groups = ["runtime"]
+)toml",
+                                     item.declaration);
+        auto project =
+            manifest(rstd::format("condition-first-error-{}", index++).as_str(), contents.as_str());
+        ASSERT_TRUE(project.is_ok());
+        auto loaded = lito::manifest::load_package_manifest(project->root.as_path());
+        ASSERT_TRUE(loaded.is_err());
+        auto error = error_chain_text(rstd::move(loaded).unwrap_err());
+        EXPECT_TRUE(error.as_str().contains(item.diagnostic)) << error;
+        EXPECT_FALSE(error.as_str().contains("lib.when[2]"_str));
+    }
 }
 
 TEST_F(Manifest, ParsesConditionalUsageFeaturesAndDependencyRequests) {

@@ -563,13 +563,11 @@ auto parse_dependencies(Option<rstd::collections::BTreeMap<String, wire::Depende
 }
 
 auto contains_dependency(const ParsedDependencies& dependencies, ref<str> name) -> bool {
-    for (const auto& dependency : dependencies.explicit_dependencies) {
-        if (dependency.name.as_str() == name) return true;
-    }
-    for (const auto& dependency : dependencies.workspace_dependencies) {
-        if (dependency.name.as_str() == name) return true;
-    }
-    return false;
+    return dependencies.explicit_dependencies.iter().any([&](auto dependency) {
+        return dependency->name.as_str() == name;
+    }) || dependencies.workspace_dependencies.iter().any([&](auto dependency) {
+        return dependency->name.as_str() == name;
+    });
 }
 
 struct ParsedRuntimeDependencies {

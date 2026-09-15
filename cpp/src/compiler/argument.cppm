@@ -150,10 +150,9 @@ auto allowed_values_text(const CompilerArgumentDefinition& definition) -> String
 
 auto allowed_value(const CompilerArgumentDefinition& definition, ref<str> value) -> bool {
     if (definition.allowed_values.is_empty()) return true;
-    for (const auto& candidate : definition.allowed_values) {
-        if (candidate.as_str() == value) return true;
-    }
-    return false;
+    return definition.allowed_values.iter().any([&](auto candidate) {
+        return candidate->as_str() == value;
+    });
 }
 
 struct SpellingMatch {

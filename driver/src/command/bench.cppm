@@ -47,10 +47,9 @@ struct BenchSummary {
     Vec<BenchExecution> executions;
 
     auto success() const noexcept -> bool {
-        for (const auto& execution : executions) {
-            if (! execution.success()) return false;
-        }
-        return true;
+        return executions.iter().all([&](auto execution) {
+            return execution->success();
+        });
     }
 };
 

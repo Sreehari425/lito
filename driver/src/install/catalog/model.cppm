@@ -91,13 +91,16 @@ struct InstallPackageInfo {
     Vec<InstallStoredRuntimeDependency> runtime_dependencies;
 
     auto clone() const -> InstallPackageInfo {
-        auto copied_entries = Vec<InstallOwnedEntry>::with_capacity(entries.len());
-        for (const auto& entry : entries) copied_entries.push(entry.clone());
-        auto copied_dependencies =
-            Vec<InstallStoredRuntimeDependency>::with_capacity(runtime_dependencies.len());
-        for (const auto& dependency : runtime_dependencies) {
-            copied_dependencies.push(dependency.clone());
-        }
+        auto copied_entries      = entries.iter()
+                                       .map([](auto entry) {
+                                      return entry->clone();
+                                       })
+                                       .collect<Vec<InstallOwnedEntry>>();
+        auto copied_dependencies = runtime_dependencies.iter()
+                                       .map([](auto dependency) {
+                                           return dependency->clone();
+                                       })
+                                       .collect<Vec<InstallStoredRuntimeDependency>>();
         return InstallPackageInfo {
             .identity             = identity.clone(),
             .version              = version.clone(),

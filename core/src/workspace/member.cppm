@@ -327,9 +327,12 @@ auto resolve_workspace_member_dependencies(lito::manifest::PackageManifest&     
                 .consumption = target.consumption,
             });
         }
-        auto components = as<Clone>(definition->components).clone();
-        auto host_tools = Vec<lito::dependency::CMakeHostToolRequirement>::make();
-        for (const auto& tool : definition->host_tools) host_tools.push(tool.clone());
+        auto components  = as<Clone>(definition->components).clone();
+        auto host_tools  = definition->host_tools.iter()
+                               .map([](auto tool) {
+                                  return tool->clone();
+                               })
+                               .collect<Vec<lito::dependency::CMakeHostToolRequirement>>();
         auto requirement = lito::dependency::CMakeDependencyRequirement {
             .alias            = reference.alias.clone(),
             .package          = definition->package.clone(),

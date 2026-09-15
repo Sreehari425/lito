@@ -160,10 +160,11 @@ struct PackageState {
     Option<usize>          selected_release;
 
     auto clone() const -> PackageState {
-        auto cloned_constraints = Vec<PackageConstraint>::with_capacity(constraints.len());
-        for (const auto& constraint : constraints) {
-            cloned_constraints.push(constraint.clone());
-        }
+        auto cloned_constraints = constraints.iter()
+                                      .map([](auto constraint) {
+                                          return constraint->clone();
+                                      })
+                                      .collect<Vec<PackageConstraint>>();
         return PackageState {
             .package          = package.clone(),
             .constraints      = rstd::move(cloned_constraints),
@@ -186,8 +187,11 @@ auto same_package(const RegistryPackageId& left, const RegistryPackageId& right)
 }
 
 auto clone_states(const Vec<PackageState>& states) -> Vec<PackageState> {
-    auto result = Vec<PackageState>::with_capacity(states.len());
-    for (const auto& state : states) result.push(state.clone());
+    auto result = states.iter()
+                      .map([](auto state) {
+                          return state->clone();
+                      })
+                      .collect<Vec<PackageState>>();
     return result;
 }
 
@@ -245,18 +249,16 @@ class Solver {
     }
 
     auto development_enabled(const RegistryPackageId& package) const -> bool {
-        for (const auto& candidate : input_.development_packages) {
-            if (same_package(candidate, package)) return true;
-        }
-        return false;
+        return input_.development_packages.iter().any([&](auto candidate) {
+            return same_package((*candidate), package);
+        });
     }
 
     static auto satisfies(const PackageState& state, const RegistryReleaseProjection& release)
         -> bool {
-        for (const auto& constraint : state.constraints) {
-            if (! constraint.requirement.matches(release.version)) return false;
-        }
-        return true;
+        return state.constraints.iter().all([&](auto constraint) {
+            return constraint->requirement.matches(release.version);
+        });
     }
 
     auto candidates(const PackageState& state, usize index_position)
@@ -342,10 +344,11 @@ class Solver {
                 .source      = constraint.source.clone(),
             });
         }
-        auto candidates = Vec<String>::make();
-        for (const auto& release : indices_[index_position].index.releases()) {
-            candidates.push(release.version.text());
-        }
+        auto candidates = rstd::iter::from_slice(indices_[index_position].index.releases())
+                              .map([](auto release) {
+                                  return release->version.text();
+                              })
+                              .collect<Vec<String>>();
         return RegistrySolverError::Incompatibility(
             state.package.clone(), rstd::move(constraints), rstd::move(candidates));
     }

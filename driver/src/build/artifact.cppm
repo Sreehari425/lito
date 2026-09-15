@@ -77,8 +77,11 @@ struct BuiltArtifact {
     String                            link_identity;
 
     auto clone() const -> BuiltArtifact {
-        auto copied = Vec<BuiltArtifactFile>::with_capacity(companions.len());
-        for (const auto& file : companions) copied.push(file.clone());
+        auto copied = companions.iter()
+                          .map([](auto file) {
+                              return file->clone();
+                          })
+                          .collect<Vec<BuiltArtifactFile>>();
         return BuiltArtifact {
             .target        = target.clone(),
             .kind          = kind,
@@ -152,8 +155,11 @@ struct ProcMacroAggregateRequest {
     Vec<ProcMacroProviderBinding> providers;
 
     auto clone() const -> ProcMacroAggregateRequest {
-        auto copied = Vec<ProcMacroProviderBinding>::with_capacity(providers.len());
-        for (const auto& provider : providers) copied.push(provider.clone());
+        auto copied = providers.iter()
+                          .map([](auto provider) {
+                              return provider->clone();
+                          })
+                          .collect<Vec<ProcMacroProviderBinding>>();
         return ProcMacroAggregateRequest {
             .identity  = identity.clone(),
             .providers = rstd::move(copied),
@@ -169,8 +175,11 @@ struct BuiltProcMacroAggregate {
     Vec<ProcMacroProviderBinding> providers;
 
     auto clone() const -> BuiltProcMacroAggregate {
-        auto copied = Vec<ProcMacroProviderBinding>::with_capacity(providers.len());
-        for (const auto& provider : providers) copied.push(provider.clone());
+        auto copied = providers.iter()
+                          .map([](auto provider) {
+                              return provider->clone();
+                          })
+                          .collect<Vec<ProcMacroProviderBinding>>();
         return BuiltProcMacroAggregate {
             .selection_identity = selection_identity.clone(),
             .identity           = identity.clone(),

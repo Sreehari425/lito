@@ -186,8 +186,11 @@ class SourceManager {
 
     auto clone_external_outcome(const ExternalSourceFetchOutcome& outcome)
         -> ExternalSourceFetchOutcome {
-        auto sources = Vec<ResolvedPackageSource>::with_capacity(outcome.sources.len());
-        for (const auto& source : outcome.sources) sources.push(clone_source(source));
+        auto sources = outcome.sources.iter()
+                           .map([this](auto source) {
+                               return clone_source(*source);
+                           })
+                           .collect<Vec<ResolvedPackageSource>>();
         return ExternalSourceFetchOutcome {
             .acquired =
                 AcquiredSource {

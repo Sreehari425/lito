@@ -17,11 +17,10 @@ using PathBuf = rstd::path::PathBuf;
 using namespace lito::manifest;
 
 auto source_tree_file(const lito::source::SourceTree& tree, ref<str> path) -> bool {
-    for (const auto& entry : tree.entries()) {
-        if (entry.path().as_str() == path && entry.kind() == lito::source::SourceEntryKind::File)
-            return true;
-    }
-    return false;
+    return rstd::iter::from_slice(tree.entries()).any([&](auto entry) {
+        return entry->path().as_str() == path &&
+               entry->kind() == lito::source::SourceEntryKind::File;
+    });
 }
 
 auto validate_script_entry(ref<rstd::path::Path>                 root,

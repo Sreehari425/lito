@@ -122,10 +122,12 @@ auto ResolvedCMakeDependencyRequirement::clone() const -> ResolvedCMakeDependenc
             .consumption = target.consumption,
         });
     }
-    auto tool_copy =
-        Vec<lito::dependency::CMakeHostToolRequirement>::with_capacity(host_tools.len());
-    for (const auto& tool : host_tools) tool_copy.push(tool.clone());
-    auto result = ResolvedCMakeDependencyRequirement {
+    auto tool_copy = host_tools.iter()
+                         .map([](auto tool) {
+                             return tool->clone();
+                         })
+                         .collect<Vec<lito::dependency::CMakeHostToolRequirement>>();
+    auto result    = ResolvedCMakeDependencyRequirement {
         .alias            = alias.clone(),
         .package          = package.clone(),
         .components       = as<Clone>(components).clone(),
@@ -172,10 +174,11 @@ auto cmake_request(const ResolvedCMakeDependencyRequirement& requirement,
         });
     }
     auto targets =
-        Vec<lito::tools::cmake::TargetRequirement>::with_capacity(requirement.targets.len());
-    for (const auto& target : requirement.targets) {
-        targets.push(lito::tools::cmake::TargetRequirement { .name = target.name.clone() });
-    }
+        requirement.targets.iter()
+            .map([](auto target) {
+                return lito::tools::cmake::TargetRequirement { .name = target->name.clone() };
+            })
+            .collect<Vec<lito::tools::cmake::TargetRequirement>>();
     auto host_tools = Vec<lito::tools::cmake::HostToolRequirement>::make();
     for (const auto& tool : requirement.host_tools) {
         host_tools.push(lito::tools::cmake::HostToolRequirement {
@@ -684,9 +687,12 @@ auto materialize_cmake_usage(const CMakePackagePlan&                   plan,
             .digest     = selected->digest.clone(),
         });
     }
-    auto projected_assets = Vec<ExternalAssetSet>::with_capacity(snapshots.assets.len());
-    for (const auto& asset : snapshots.assets) projected_assets.push(asset.clone());
-    auto projected = CMakeUsageSnapshot {
+    auto projected_assets = snapshots.assets.iter()
+                                .map([](auto asset) {
+                                    return asset->clone();
+                                })
+                                .collect<Vec<ExternalAssetSet>>();
+    auto projected        = CMakeUsageSnapshot {
         .version    = snapshots.version.clone(),
         .targets    = rstd::move(projected_targets),
         .host_tools = rstd::move(projected_tools),

@@ -222,8 +222,11 @@ auto canonical_argument(const CompilerArgumentMatch& matched) -> String {
 }
 
 auto compiler_argument_raw_tokens(const CompilerArgumentMatch& matched) -> Vec<String> {
-    auto result = Vec<String>::with_capacity(matched.raw_tokens.len());
-    for (const auto& token : matched.raw_tokens) result.push(token.clone());
+    auto result = matched.raw_tokens.iter()
+                      .map([](auto token) {
+                          return token->clone();
+                      })
+                      .collect<Vec<String>>();
     return result;
 }
 

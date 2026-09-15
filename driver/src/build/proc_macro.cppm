@@ -736,8 +736,11 @@ auto build_proc_macro_aggregates(const cpp::BuildConfiguration&        configura
         }
         auto aggregate_content_identity =
             rstd_try(file_digest(plugin.as_path(), "read proc-macro aggregate plugin"_str));
-        auto providers = Vec<ProcMacroProviderBinding>::with_capacity(request.providers.len());
-        for (const auto& provider : request.providers) providers.push(provider.clone());
+        auto providers = request.providers.iter()
+                             .map([](auto provider) {
+                                 return provider->clone();
+                             })
+                             .collect<Vec<ProcMacroProviderBinding>>();
         output.aggregates.push(BuiltProcMacroAggregate {
             .selection_identity = request.identity.clone(),
             .identity           = rstd::move(aggregate_identity),

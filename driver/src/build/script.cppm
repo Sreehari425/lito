@@ -162,24 +162,21 @@ auto same_output(const OwnedOutput& left, const OwnedOutput& right) noexcept -> 
 
 auto contains_output(const Vec<OwnedOutput>& values, const OwnedOutput& candidate) noexcept
     -> bool {
-    for (const auto& value : values) {
-        if (same_output(value, candidate)) return true;
-    }
-    return false;
+    return values.iter().any([&](auto value) {
+        return same_output((*value), candidate);
+    });
 }
 
 auto package_is_selected(const Vec<ConfigurePackage>& packages, ref<str> name) noexcept -> bool {
-    for (const auto& package : packages) {
-        if (package.name == name) return true;
-    }
-    return false;
+    return packages.iter().any([&](auto package) {
+        return package->name == name;
+    });
 }
 
 auto package_is_selected(const Vec<String>& packages, ref<str> name) noexcept -> bool {
-    for (const auto& package : packages) {
-        if (package == name) return true;
-    }
-    return false;
+    return packages.iter().any([&](auto package) {
+        return (*package) == name;
+    });
 }
 
 auto package_component_is_valid(ref<str> package) noexcept -> bool {
@@ -671,8 +668,11 @@ auto action_output_array(const luato::Array& values, ref<str> context)
 }
 
 auto lua_string_array(const Vec<String>& values) -> luato::Array {
-    auto result = Vec<luato::Value>::with_capacity(values.len());
-    for (const auto& value : values) result.push(luato::Value::String(value.clone()));
+    auto result = values.iter()
+                      .map([](auto value) {
+                          return luato::Value::String(value->clone());
+                      })
+                      .collect<Vec<luato::Value>>();
     return luato::Array::from(rstd::move(result));
 }
 
@@ -1426,9 +1426,12 @@ public:
                 if (inserted.is_err())
                     return action_request_failure<luato::Table>(
                         rstd::format("{}", inserted.unwrap_err()));
-                auto targets = Vec<String>::with_capacity(dependency.targets.len());
-                for (const auto& target : dependency.targets) targets.push(target.name.clone());
-                inserted = result.set(String::make("targets"_str), lua_string_array(targets));
+                auto targets = dependency.targets.iter()
+                                   .map([](auto target) {
+                                       return target->name.clone();
+                                   })
+                                   .collect<Vec<String>>();
+                inserted     = result.set(String::make("targets"_str), lua_string_array(targets));
                 if (inserted.is_err())
                     return action_request_failure<luato::Table>(
                         rstd::format("{}", inserted.unwrap_err()));
@@ -1674,9 +1677,11 @@ public:
             identity_text.push_str(input.digest.as_str());
         }
         if (lua_state_ != nullptr) {
-            auto loaded_identities = Vec<String>::make();
-            for (const auto& module : lua_state_->loaded_modules())
-                loaded_identities.push(module.identity.clone());
+            auto loaded_identities = rstd::iter::from_slice(lua_state_->loaded_modules())
+                                         .map([](auto module) {
+                                             return module->identity.clone();
+                                         })
+                                         .collect<Vec<String>>();
             rstd::slice_::sort_unstable(loaded_identities.as_mut_slice().as_mut_ref());
             for (const auto& module : loaded_identities) {
                 identity_text.push_str("\nmodule:"_str);
@@ -1856,9 +1861,11 @@ public:
             identity_text.push_str(generated_output_kind_name(output_kinds[index]));
         }
         if (lua_state_ != nullptr) {
-            auto loaded_identities = Vec<String>::make();
-            for (const auto& module : lua_state_->loaded_modules())
-                loaded_identities.push(module.identity.clone());
+            auto loaded_identities = rstd::iter::from_slice(lua_state_->loaded_modules())
+                                         .map([](auto module) {
+                                             return module->identity.clone();
+                                         })
+                                         .collect<Vec<String>>();
             rstd::slice_::sort_unstable(loaded_identities.as_mut_slice().as_mut_ref());
             for (const auto& module : loaded_identities) {
                 identity_text.push_str("\nmodule:"_str);
@@ -2272,10 +2279,11 @@ public:
                                           script_digest.as_str());
         identity_text.push_str("\nmodule-resolver=lito-restricted-v1"_str);
         if (lua_state_ != nullptr) {
-            auto loaded_identities = Vec<String>::make();
-            for (const auto& module : lua_state_->loaded_modules()) {
-                loaded_identities.push(module.identity.clone());
-            }
+            auto loaded_identities = rstd::iter::from_slice(lua_state_->loaded_modules())
+                                         .map([](auto module) {
+                                             return module->identity.clone();
+                                         })
+                                         .collect<Vec<String>>();
             rstd::slice_::sort_unstable(loaded_identities.as_mut_slice().as_mut_ref());
             for (const auto& module : loaded_identities) {
                 identity_text.push_str("\nmodule:"_str);
@@ -3050,8 +3058,11 @@ private:
         auto dependencies = rstd_try(current_action_dependencies(action));
         if (action.depfile_output.is_some()) {
             auto staged_depfile = staging.join(action.outputs[*action.depfile_output].as_path());
-            auto direct_inputs  = Vec<PathBuf>::with_capacity(action.inputs.len());
-            for (const auto& input : action.inputs) direct_inputs.push(input.path.clone());
+            auto direct_inputs  = action.inputs.iter()
+                                      .map([](auto input) {
+                                         return input->path.clone();
+                                      })
+                                      .collect<Vec<PathBuf>>();
             auto depfile_working_directory = action.working_directory.clone();
             if (action.output_working_directory.is_some()) {
                 auto output =
@@ -3852,8 +3863,11 @@ auto build_script_exists(ref<rstd::path::Path> script) -> BuildScriptResult<bool
 }
 
 auto copy_package_names(const Vec<String>& packages) -> Vec<String> {
-    auto copied = Vec<String>::with_capacity(packages.len());
-    for (const auto& package : packages) copied.push(package.clone());
+    auto copied = packages.iter()
+                      .map([](auto package) {
+                          return package->clone();
+                      })
+                      .collect<Vec<String>>();
     return copied;
 }
 
@@ -4143,10 +4157,9 @@ void merge_build_script_report(BuildScriptReport& total, BuildScriptReport repor
 }
 
 auto package_has_script(const Vec<String>& packages, ref<str> package) noexcept -> bool {
-    for (const auto& candidate : packages) {
-        if (candidate == package) return true;
-    }
-    return false;
+    return packages.iter().any([&](auto candidate) {
+        return (*candidate) == package;
+    });
 }
 
 auto evaluate_build_scripts(cpp::PackageMetadata&                    metadata,

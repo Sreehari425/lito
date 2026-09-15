@@ -127,8 +127,11 @@ public:
           identity_(rstd::move(identity)) {}
 
     auto clone() const -> AndroidNdkDistribution {
-        auto abis = Vec<AndroidNdkAbi>::with_capacity(abis_.len());
-        for (const auto& abi : abis_) abis.push(abi.clone());
+        auto abis = abis_.iter()
+                        .map([](auto abi) {
+                            return abi->clone();
+                        })
+                        .collect<Vec<AndroidNdkAbi>>();
         return AndroidNdkDistribution(root_.clone(),
                                       revision_.clone(),
                                       release_name_.clone(),

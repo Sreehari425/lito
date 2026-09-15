@@ -149,10 +149,11 @@ auto required_bool(const Json& value, ref<str> key, ref<str> context) -> Registr
 }
 
 auto known_field(ref<str> field, initializer_list<ref<str>> allowed) -> bool {
-    for (auto candidate : allowed) {
-        if (field == candidate) return true;
-    }
-    return false;
+    return rstd::iter::from_slice(
+               slice<ref<str>>::from_raw_parts(allowed.begin(), usize(allowed.size())))
+        .any([&](auto candidate) {
+            return field == (*candidate);
+        });
 }
 
 auto reject_unknown(const Json& value, ref<str> context, initializer_list<ref<str>> allowed)
@@ -373,10 +374,9 @@ auto parse_release(const Json& value, ref<str> context)
 
 auto release_exists(slice<lito::registry::RegistryReleaseProjection> releases,
                     const lito::registry::SemanticVersion&           version) -> bool {
-    for (const auto& release : releases) {
-        if (release.version == version) return true;
-    }
-    return false;
+    return rstd::iter::from_slice(releases).any([&](auto release) {
+        return release->version == version;
+    });
 }
 
 } // namespace
@@ -441,10 +441,11 @@ auto lito::registry::RegistryDependencyProjection::clone() const -> RegistryDepe
 }
 
 auto lito::registry::RegistryReleaseProjection::clone() const -> RegistryReleaseProjection {
-    auto cloned_dependencies = Vec<RegistryDependencyProjection>::with_capacity(dependencies.len());
-    for (const auto& dependency : dependencies) {
-        cloned_dependencies.push(dependency.clone());
-    }
+    auto cloned_dependencies = dependencies.iter()
+                                   .map([](auto dependency) {
+                                       return dependency->clone();
+                                   })
+                                   .collect<Vec<RegistryDependencyProjection>>();
     return RegistryReleaseProjection {
         .version      = version.clone(),
         .checksum     = checksum.clone(),
@@ -455,8 +456,11 @@ auto lito::registry::RegistryReleaseProjection::clone() const -> RegistryRelease
 }
 
 auto lito::registry::RegistryPackageIndex::clone() const -> RegistryPackageIndex {
-    auto releases = Vec<RegistryReleaseProjection>::with_capacity(releases_.len());
-    for (const auto& release : releases_) releases.push(release.clone());
+    auto releases = releases_.iter()
+                        .map([](auto release) {
+                            return release->clone();
+                        })
+                        .collect<Vec<RegistryReleaseProjection>>();
     return RegistryPackageIndex(package_.clone(), rstd::move(releases));
 }
 

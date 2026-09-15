@@ -144,8 +144,11 @@ struct LlvmSdkRelease {
     Vec<LlvmSdkArtifact> artifacts;
 
     auto clone() const -> LlvmSdkRelease {
-        auto copied = Vec<LlvmSdkArtifact>::with_capacity(artifacts.len());
-        for (const auto& artifact : artifacts) copied.push(artifact.clone());
+        auto copied = artifacts.iter()
+                          .map([](auto artifact) {
+                              return artifact->clone();
+                          })
+                          .collect<Vec<LlvmSdkArtifact>>();
         return LlvmSdkRelease {
             .version      = version.clone(),
             .upstream_tag = upstream_tag.clone(),

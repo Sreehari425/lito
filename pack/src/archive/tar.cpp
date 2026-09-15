@@ -35,10 +35,9 @@ auto tar_error(String message, ArchiveErrorKind kind = ArchiveErrorKind::Tar) ->
 }
 
 auto all_zero(slice<u8> bytes) noexcept -> bool {
-    for (auto byte : bytes) {
-        if (byte != u8 {}) return false;
-    }
-    return true;
+    return rstd::iter::from_slice(bytes).all([](auto byte) {
+        return *byte == u8 {};
+    });
 }
 
 auto field_bytes(slice<u8> block, usize offset, usize length) noexcept -> slice<u8> {

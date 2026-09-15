@@ -106,13 +106,13 @@ auto declared_paths(Option<Vec<String>> value, ref<str> context, bool required)
         return manifest_schema_failure<Vec<PathBuf>>(rstd::format("{} is required", context));
     }
 
-    auto result = Vec<PathBuf>::make();
     auto items  = rstd::move(value).unwrap_or(Vec<String>::make());
-    for (auto& item : items) {
-        auto path = relative_path(rstd::move(item), context);
-        if (path.is_err()) return Err(rstd::move(path).unwrap_err());
-        result.push(rstd::move(path).unwrap());
-    }
+    auto result = rstd_try(rstd::move(items)
+                               .into_iter()
+                               .map([context](String item) {
+                                   return relative_path(rstd::move(item), context);
+                               })
+                               .collect<ManifestSchemaResult<Vec<PathBuf>>>());
     if (required && result.is_empty()) {
         return manifest_schema_failure<Vec<PathBuf>>(rstd::format("{} must not be empty", context));
     }
@@ -126,11 +126,11 @@ auto predicate_values(Option<wire::TextList> value, ref<str> context)
     if (result.is_empty()) {
         return manifest_schema_failure<Vec<String>>(rstd::format("{} must not be empty", context));
     }
-    for (const auto& item : result) {
-        if (item.is_empty()) {
-            return manifest_schema_failure<Vec<String>>(
-                rstd::format("{} item must not be empty", context));
-        }
+    if (result.iter().any([](auto item) {
+            return item->is_empty();
+        })) {
+        return manifest_schema_failure<Vec<String>>(
+            rstd::format("{} item must not be empty", context));
     }
     return Ok(rstd::move(result));
 }
@@ -198,10 +198,9 @@ auto parse_target_predicate(Option<wire::Predicate> value, ref<str> context)
 }
 
 auto path_repeated(const Vec<PathBuf>& paths, ref<rstd::path::Path> candidate) -> bool {
-    for (const auto& path : paths) {
-        if (path.as_path() == candidate) return true;
-    }
-    return false;
+    return paths.iter().any([candidate](auto path) {
+        return path->as_path() == candidate;
+    });
 }
 
 auto append_attachment_source(TestAttachmentManifest& attachment, PathBuf source, DataPath path)
@@ -238,27 +237,29 @@ auto validate_source_group_names(Vec<String> names, const DataPath& path, bool r
 auto parse_target_source_conditions(Vec<lito::manifest::wire::TargetSourceCondition> entries,
                                     const DataPath&                                  owner_path)
     -> ManifestSchemaResult<Vec<ConditionalTargetSources>> {
-    auto result = Vec<ConditionalTargetSources>::make();
-    auto path   = owner_path.with_field("when"_str);
-    for (usize index {}; index < entries.len(); ++index) {
-        auto& entry     = entries[index];
-        auto  item      = path.with_index(index);
-        auto  source    = rstd::move(entry.condition);
-        auto  condition = lito::condition::parse(source.as_str());
-        if (condition.is_err()) {
-            auto message = rstd::format("invalid condition: {}", condition.unwrap_err());
-            return manifest_data_failure<Vec<ConditionalTargetSources>>(
-                item.with_field("condition"_str), message.as_str());
-        }
-        auto groups = rstd_try(validate_source_group_names(
-            rstd::move(entry.source_groups), item.with_field("source-groups"_str), true));
-        result.push(ConditionalTargetSources {
-            .source        = rstd::move(source),
-            .condition     = rstd::move(condition).unwrap(),
-            .source_groups = rstd::move(groups),
-        });
-    }
-    return Ok(rstd::move(result));
+    auto path = owner_path.with_field("when"_str);
+    return rstd::move(entries)
+        .into_iter()
+        .enumerate()
+        .map([&path](auto indexed) -> ManifestSchemaResult<ConditionalTargetSources> {
+            auto& entry     = indexed.template get<1>();
+            auto  item      = path.with_index(indexed.template get<0>());
+            auto  source    = rstd::move(entry.condition);
+            auto  condition = lito::condition::parse(source.as_str());
+            if (condition.is_err()) {
+                auto message = rstd::format("invalid condition: {}", condition.unwrap_err());
+                return manifest_data_failure<ConditionalTargetSources>(
+                    item.with_field("condition"_str), message.as_str());
+            }
+            auto groups = rstd_try(validate_source_group_names(
+                rstd::move(entry.source_groups), item.with_field("source-groups"_str), true));
+            return Ok(ConditionalTargetSources {
+                .source        = rstd::move(source),
+                .condition     = rstd::move(condition).unwrap(),
+                .source_groups = rstd::move(groups),
+            });
+        })
+        .collect<ManifestSchemaResult<Vec<ConditionalTargetSources>>>();
 }
 
 auto parse_test_attachments(Option<Vec<lito::manifest::wire::TestAttachment>> value,

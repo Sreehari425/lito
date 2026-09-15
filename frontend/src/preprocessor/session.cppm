@@ -102,18 +102,16 @@ class PreprocessorSession {
             : values_(ScratchDisabledVec::new_in(allocator)) {}
 
         auto contains(ref<str> value) const -> bool {
-            for (const auto& macro : values_) {
-                if (macro.definition->name.as_str() == value) return true;
-            }
-            return false;
+            return values_.iter().any([&](auto macro) {
+                return macro->definition->name.as_str() == value;
+            });
         }
 
         auto contains_dynamic(ref<str> value) const -> bool {
             if (dynamic_builtins_ == usize {}) return false;
-            for (const auto& macro : values_) {
-                if (macro.dynamic_builtin && macro.definition->name.as_str() == value) return true;
-            }
-            return false;
+            return values_.iter().any([&](auto macro) {
+                return macro->dynamic_builtin && macro->definition->name.as_str() == value;
+            });
         }
 
         auto push(MacroDefinitionHandle definition, bool dynamic_builtin) -> void {

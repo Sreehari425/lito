@@ -159,9 +159,11 @@ public:
                                          : Vec<ScopedAttributeUse>::make(),
             .header_inputs =
                 [&]() {
-                    auto paths =
-                        Vec<rstd::path::PathBuf>::with_capacity(translation.header_inputs.len());
-                    for (const auto& path : translation.header_inputs) paths.push(path.clone());
+                    auto paths = translation.header_inputs.iter()
+                                     .map([](auto path) {
+                                         return path->clone();
+                                     })
+                                     .collect<Vec<rstd::path::PathBuf>>();
                     return paths;
                 }(),
             .embedded_inputs          = as<Clone>(translation.embedded_inputs).clone(),

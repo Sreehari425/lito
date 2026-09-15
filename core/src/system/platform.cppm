@@ -448,16 +448,14 @@ struct TargetPredicate {
     auto matches(const TargetInfo& target) const noexcept -> bool {
         const auto contains = [](const Vec<String>& values, ref<str> value) {
             if (values.is_empty()) return true;
-            for (const auto& candidate : values) {
-                if (candidate.as_str() == value) return true;
-            }
-            return false;
+            return values.iter().any([&](auto candidate) {
+                return candidate->as_str() == value;
+            });
         };
         const auto excludes = [](const Vec<String>& values, ref<str> value) {
-            for (const auto& candidate : values) {
-                if (candidate.as_str() == value) return true;
-            }
-            return false;
+            return values.iter().any([&](auto candidate) {
+                return candidate->as_str() == value;
+            });
         };
         return contains(families, target.family_name()) &&
                contains(operating_systems, target.platform_name()) &&

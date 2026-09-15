@@ -112,10 +112,9 @@ auto registry_name_is_reserved(ref<str> value) -> bool {
         "com9"_str, "lpt1"_str, "lpt2"_str, "lpt3"_str, "lpt4"_str, "lpt5"_str,
         "lpt6"_str, "lpt7"_str, "lpt8"_str, "lpt9"_str,
     };
-    for (auto name : names) {
-        if (value == name) return true;
-    }
-    return false;
+    return rstd::iter::from_array(names).any([&](auto name) {
+        return value == (*name);
+    });
 }
 
 auto lito::registry::RegistryPackageName::parse(ref<str> value)

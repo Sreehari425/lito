@@ -33,13 +33,15 @@ struct ExternalAssetSet {
     Vec<ExternalAssetEntry>  entries;
 
     auto clone() const -> ExternalAssetSet {
-        auto copied = Vec<ExternalAssetEntry>::with_capacity(entries.len());
-        for (const auto& entry : entries) copied.push(entry.clone());
         return ExternalAssetSet {
             .alias       = alias.clone(),
             .name        = name.clone(),
             .disposition = disposition,
-            .entries     = rstd::move(copied),
+            .entries     = entries.iter()
+                               .map([](auto entry) {
+                               return entry->clone();
+                           })
+                           .collect<Vec<ExternalAssetEntry>>(),
         };
     }
 };

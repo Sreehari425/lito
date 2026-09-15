@@ -142,8 +142,11 @@ auto prepare_external_source_task(ExternalSourceTask task)
             .consumption = target.consumption,
         });
     }
-    auto host_tools = Vec<lito::dependency::CMakeHostToolRequirement>::make();
-    for (const auto& tool : declaration.host_tools) host_tools.push(tool.clone());
+    auto host_tools       = declaration.host_tools.iter()
+                                .map([](auto tool) {
+                              return tool->clone();
+                                })
+                                .collect<Vec<lito::dependency::CMakeHostToolRequirement>>();
     auto components       = as<Clone>(declaration.components).clone();
     auto config_directory = Option<PathBuf> {};
     if (! task.installed_override && declaration.config_directory.is_some()) {
@@ -412,8 +415,11 @@ auto prepare_external_dependency_sources(lito::package::ResolvedPackageGraph&  g
                                          usize                                 jobs     = usize(1),
                                          BuildEventSink                        observer = {})
     -> lito::dependency::DependencyResult<PreparedExternalDependencySources> {
-    auto selected = Vec<String>::with_capacity(graph.packages.len());
-    for (const auto& package : graph.packages) selected.push(package.manifest.name.clone());
+    auto selected = graph.packages.iter()
+                        .map([](auto package) {
+                            return package->manifest.name.clone();
+                        })
+                        .collect<Vec<String>>();
     return prepare_external_dependency_sources(
         graph, selected, rstd::move(options), resolver, environment, jobs, observer);
 }
@@ -490,8 +496,11 @@ auto resolve_cmake_requirement_for_platform(const PreparedCMakeDependencyRequire
             .consumption = target.consumption,
         });
     }
-    auto host_tools = Vec<lito::dependency::CMakeHostToolRequirement>::make();
-    for (const auto& tool : requirement.host_tools) host_tools.push(tool.clone());
+    auto host_tools = requirement.host_tools.iter()
+                          .map([](auto tool) {
+                              return tool->clone();
+                          })
+                          .collect<Vec<lito::dependency::CMakeHostToolRequirement>>();
     auto components = as<Clone>(requirement.components).clone();
     return Ok(SelectedCMakeDependencyRequirement {
         .alias            = requirement.alias.clone(),
@@ -542,8 +551,11 @@ auto materialize_cmake_requirement(const SelectedCMakeDependencyRequirement& req
             .consumption = target.consumption,
         });
     }
-    auto host_tools = Vec<lito::dependency::CMakeHostToolRequirement>::make();
-    for (const auto& tool : requirement.host_tools) host_tools.push(tool.clone());
+    auto host_tools = requirement.host_tools.iter()
+                          .map([](auto tool) {
+                              return tool->clone();
+                          })
+                          .collect<Vec<lito::dependency::CMakeHostToolRequirement>>();
     auto components = as<Clone>(requirement.components).clone();
     return Ok(ResolvedCMakeDependencyRequirement {
         .alias            = requirement.alias.clone(),

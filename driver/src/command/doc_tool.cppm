@@ -43,19 +43,17 @@ auto doc_tool_failure(ref<str> message) -> DocResult<T> {
 auto json_protocol_contains(const Json& value, ref<str> key, u64 expected) -> bool {
     auto member = value.get(key);
     if (member.is_none() || (**member).as_array().is_none()) return false;
-    for (const auto& item : **(**member).as_array()) {
-        if (item.as_u64() == Some(expected)) return true;
-    }
-    return false;
+    return (**(**member).as_array()).iter().any([&](auto item) {
+        return item->as_u64() == Some(expected);
+    });
 }
 
 auto json_feature_contains(const Json& value, ref<str> expected) -> bool {
     auto member = value.get("features"_str);
     if (member.is_none() || (**member).as_array().is_none()) return false;
-    for (const auto& item : **(**member).as_array()) {
-        if (item.as_str() == Some(expected)) return true;
-    }
-    return false;
+    return (**(**member).as_array()).iter().any([&](auto item) {
+        return item->as_str() == Some(expected);
+    });
 }
 
 struct DocToolCapabilities {

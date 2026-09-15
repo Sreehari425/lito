@@ -1617,10 +1617,9 @@ auto build_with_environment_impl(const BuildRequest&                       reque
     }
     const auto selected_product =
         [&selected_targets](const lito::package::PackageTargetId& target) {
-            for (const auto& selected : selected_targets) {
-                if (selected == target) return true;
-            }
-            return false;
+            return selected_targets.iter().any([&](auto selected) {
+                return (*selected) == target;
+            });
         };
     auto extended = extend_native_action_graph(native_graph,
                                                package,
@@ -1969,18 +1968,21 @@ auto build_with_environment_impl(const BuildRequest&                       reque
             proc_macro_aggregates.push(aggregate.clone());
         }
     }
-    auto product_proc_macro_providers =
-        Vec<BuiltProcMacroProvider>::with_capacity(proc_macro_providers.len());
-    for (const auto& provider : proc_macro_providers) {
-        product_proc_macro_providers.push(provider.clone());
-    }
-    auto product_proc_macro_aggregates =
-        Vec<BuiltProcMacroAggregate>::with_capacity(proc_macro_aggregates.len());
-    for (const auto& aggregate : proc_macro_aggregates) {
-        product_proc_macro_aggregates.push(aggregate.clone());
-    }
-    auto product_compiler_plugins = Vec<BuiltCompilerPlugin>::with_capacity(compiler_plugins.len());
-    for (const auto& plugin : compiler_plugins) product_compiler_plugins.push(plugin.clone());
+    auto product_proc_macro_providers  = proc_macro_providers.iter()
+                                             .map([](auto provider) {
+                                                return provider->clone();
+                                             })
+                                             .collect<Vec<BuiltProcMacroProvider>>();
+    auto product_proc_macro_aggregates = proc_macro_aggregates.iter()
+                                             .map([](auto aggregate) {
+                                                 return aggregate->clone();
+                                             })
+                                             .collect<Vec<BuiltProcMacroAggregate>>();
+    auto product_compiler_plugins      = compiler_plugins.iter()
+                                             .map([](auto plugin) {
+                                            return plugin->clone();
+                                             })
+                                             .collect<Vec<BuiltCompilerPlugin>>();
 
     auto product = CompletedBuildProduct {
         .profile = package_plan.profile->name.clone(),

@@ -28,8 +28,11 @@ auto environment_failure(ref<str> message) -> ToolchainResult<T> {
 }
 
 auto clone_command(const Vec<String>& source) -> Vec<String> {
-    auto result = Vec<String>::with_capacity(source.len());
-    for (const auto& argument : source) result.push(argument.clone());
+    auto result = source.iter()
+                      .map([](auto argument) {
+                          return argument->clone();
+                      })
+                      .collect<Vec<String>>();
     return result;
 }
 

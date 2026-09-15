@@ -109,8 +109,11 @@ auto NodePath::index(usize value) const -> NodePath {
 }
 
 auto NodePath::clone() const -> NodePath {
-    auto segments = Vec<NodeSegment>::with_capacity(segments_.len());
-    for (const auto& segment : segments_) segments.push(segment.clone());
+    auto segments    = segments_.iter()
+                           .map([](auto segment) {
+                            return segment->clone();
+                           })
+                           .collect<Vec<NodeSegment>>();
     auto result      = NodePath {};
     result.root_     = root_.clone();
     result.segments_ = rstd::move(segments);

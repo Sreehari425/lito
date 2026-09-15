@@ -535,13 +535,11 @@ auto assemble_manifest_document(PathBuf                               root,
         }
     }
     const auto has_external_source = [&](ref<str> name) {
-        for (const auto& source : parsed_external_sources.explicit_sources) {
-            if (source.name == name) return true;
-        }
-        for (const auto& source : parsed_external_sources.workspace_sources) {
-            if (source.name == name) return true;
-        }
-        return false;
+        return parsed_external_sources.explicit_sources.iter().any([&](auto source) {
+            return source->name == name;
+        }) || parsed_external_sources.workspace_sources.iter().any([&](auto source) {
+            return source->name == name;
+        });
     };
     const auto validate_include_sources =
         [&](const Vec<lito::dependency::IncludeDirectoryRequirement>& requirements,
@@ -582,10 +580,9 @@ auto assemble_manifest_document(PathBuf                               root,
         }
     }
     const auto has_source_group = [&](ref<str> name) {
-        for (const auto& group : parsed_source_groups) {
-            if (group.name == name) return true;
-        }
-        return false;
+        return parsed_source_groups.iter().any([&](auto group) {
+            return group->name == name;
+        });
     };
     for (const auto& manifest_target : targets) {
         const auto& target_source = package_target_source(manifest_target);

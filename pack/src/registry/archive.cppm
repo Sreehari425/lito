@@ -286,10 +286,9 @@ auto decode_archive(const VerifiedRegistryBlob& blob,
 }
 
 auto contains_string(slice<String> values, ref<str> value) noexcept -> bool {
-    for (const auto& candidate : values) {
-        if (candidate.as_str() == value) return true;
-    }
-    return false;
+    return rstd::iter::from_slice(values).any([&](auto candidate) {
+        return candidate->as_str() == value;
+    });
 }
 
 auto archive_directories(const lito::source::SourceTree& tree) -> Vec<String> {

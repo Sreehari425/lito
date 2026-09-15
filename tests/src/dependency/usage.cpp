@@ -16,6 +16,34 @@ using namespace rstd::literals;
 using namespace lito_test;
 using PathBuf = rstd::path::PathBuf;
 
+TEST(DependencyUsage, AssetClonePreservesOrderAndOwnership) {
+    auto original = lito::dependency::ExternalAssetSet {
+        .alias       = String::make("vendor"_str),
+        .name        = String::make("assets"_str),
+        .disposition = lito::dependency::ExternalAssetDisposition::Provided,
+    };
+    EXPECT_TRUE(original.clone().entries.is_empty());
+    original.entries.push(lito::dependency::ExternalAssetEntry {
+        .logical_path = PathBuf::from("second"_str), .source = PathBuf::from("src/second"_str) });
+    original.entries.push(lito::dependency::ExternalAssetEntry {
+        .logical_path = PathBuf::from("first"_str), .source = PathBuf::from("src/first"_str) });
+    auto copied                             = original.clone();
+    original.alias                          = String::make("changed"_str);
+    original.name                           = String::make("changed"_str);
+    original.entries[usize {}].logical_path = PathBuf::from("changed"_str);
+    original.entries[usize(1)].source       = PathBuf::from("changed"_str);
+    EXPECT_EQ(copied.alias, "vendor"_str);
+    EXPECT_EQ(copied.name, "assets"_str);
+    EXPECT_EQ(copied.disposition, lito::dependency::ExternalAssetDisposition::Provided);
+    ASSERT_EQ(copied.entries.len(), usize(2));
+    EXPECT_EQ(copied.entries[usize {}].logical_path.as_path(),
+              PathBuf::from("second"_str).as_path());
+    EXPECT_EQ(copied.entries[usize {}].source.as_path(), PathBuf::from("src/second"_str).as_path());
+    EXPECT_EQ(copied.entries[usize(1)].logical_path.as_path(),
+              PathBuf::from("first"_str).as_path());
+    EXPECT_EQ(copied.entries[usize(1)].source.as_path(), PathBuf::from("src/first"_str).as_path());
+}
+
 TEST(DependencyUsage, ExternalUsageSeparatesCompileVisibilityFromStaticLinkClosure) {
     auto parser = lito::make_clang_cpp_argument_parser();
     ASSERT_TRUE(parser.is_ok());

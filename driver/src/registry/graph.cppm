@@ -246,7 +246,9 @@ auto lito::registry::RegistryGraphClient::resolve_callback(
 auto lito::registry::RegistryGraphClient::resolve_locked(Vec<RegistrySolverRequirement> roots)
     -> RegistryGraphResult<Vec<RegistryReleasePin>> {
     auto result = Vec<RegistryReleasePin>::with_capacity(locked_.len() + provided_indices_.len());
-    for (const auto& pin : locked_) result.push(pin.clone());
+    rstd::iter::extend(result, locked_.iter().map([](auto pin) {
+        return pin->clone();
+    }));
     for (const auto& root : roots) {
         auto pin = locked_pin(result, root.package);
         if (pin.is_none()) {

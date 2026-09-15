@@ -180,10 +180,11 @@ auto clone_cmake_requirement(const Request& requirement) -> Request {
             .value = entry.value.clone(),
         });
     }
-    auto targets = Vec<TargetRequirement>::with_capacity(requirement.targets.len());
-    for (const auto& target : requirement.targets) {
-        targets.push(TargetRequirement { .name = target.name.clone() });
-    }
+    auto targets    = requirement.targets.iter()
+                          .map([](auto target) {
+                           return TargetRequirement { .name = target->name.clone() };
+                          })
+                          .collect<Vec<TargetRequirement>>();
     auto host_tools = Vec<HostToolRequirement>::with_capacity(requirement.host_tools.len());
     for (const auto& tool : requirement.host_tools) {
         host_tools.push(HostToolRequirement {

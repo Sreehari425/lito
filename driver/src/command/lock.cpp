@@ -46,10 +46,9 @@ struct RegistryFlatpakResolver {
 };
 
 auto has_registry_sources(const lito::lock::LockedProject& project) -> bool {
-    for (const auto& package : project.packages) {
-        if (package.source.is_some() && package.source->is_Registry()) return true;
-    }
-    return false;
+    return project.packages.iter().any([&](auto package) {
+        return package->source.is_some() && package->source->is_Registry();
+    });
 }
 
 auto attachment_path(ref<rstd::path::Path> root, ref<rstd::path::Path> requested)

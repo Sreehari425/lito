@@ -91,8 +91,11 @@ struct PackageSourceConfig {
                 .source = rstd::move(source),
             });
         }
-        auto bundles = Vec<PathBuf>::with_capacity(source_bundles.len());
-        for (const auto& bundle : source_bundles) bundles.push(bundle.clone());
+        auto bundles = source_bundles.iter()
+                           .map([](auto bundle) {
+                               return bundle->clone();
+                           })
+                           .collect<Vec<PathBuf>>();
         return PackageSourceConfig {
             .patches          = rstd::move(copied),
             .package_patches  = rstd::move(package_copies),

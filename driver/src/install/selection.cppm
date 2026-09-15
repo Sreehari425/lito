@@ -50,10 +50,9 @@ auto resolved_package(const lito::package::ResolvedPackageGraph& graph, ref<str>
 
 auto direct_package(const lito::package::ResolvedPackageSelection& selection, ref<str> name)
     -> bool {
-    for (const auto& direct : selection.selected_root_names) {
-        if (direct == name) return true;
-    }
-    return false;
+    return selection.selected_root_names.iter().any([&](auto direct) {
+        return (*direct) == name;
+    });
 }
 
 auto install_pkg_config_version_operator(lito::dependency::PkgConfigVersionOperator value) noexcept

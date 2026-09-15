@@ -122,16 +122,18 @@ struct CMakeBuildOverrideSet {
     Vec<CMakeBuildOverride> entries;
 
     auto clone() const -> CMakeBuildOverrideSet {
-        auto copied = Vec<CMakeBuildOverride>::with_capacity(entries.len());
-        for (const auto& entry : entries) copied.push(entry.clone());
+        auto copied = entries.iter()
+                          .map([](auto entry) {
+                              return entry->clone();
+                          })
+                          .collect<Vec<CMakeBuildOverride>>();
         return CMakeBuildOverrideSet { .entries = rstd::move(copied) };
     }
 
     auto contains(ref<str> package) const noexcept -> bool {
-        for (const auto& entry : entries) {
-            if (entry.package.as_str() == package) return true;
-        }
-        return false;
+        return entries.iter().any([&](auto entry) {
+            return entry->package.as_str() == package;
+        });
     }
 };
 

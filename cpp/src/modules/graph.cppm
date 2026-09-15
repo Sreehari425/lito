@@ -31,17 +31,15 @@ auto graph_failure(ref<str> message) -> ModuleResult<T> {
 }
 
 auto contains_target(const Vec<TargetId>& values, TargetId value) -> bool {
-    for (auto item : values) {
-        if (item == value) return true;
-    }
-    return false;
+    return values.iter().any([&](auto item) {
+        return (*item) == value;
+    });
 }
 
 auto contains_unit(const Vec<UnitId>& values, UnitId value) -> bool {
-    for (auto item : values) {
-        if (item == value) return true;
-    }
-    return false;
+    return values.iter().any([&](auto item) {
+        return (*item) == value;
+    });
 }
 
 auto provider_for(ref<str>                 logical_name,
@@ -680,9 +678,12 @@ auto SemanticScanGraphBuilder::clone_builder() const -> SemanticScanGraphBuilder
             .sealed   = target.sealed,
         });
     }
-    auto reverse = Vec<Vec<TargetId>>::with_capacity(reverse_importers_.len());
-    for (const auto& importers : reverse_importers_) reverse.push(importers.clone());
-    auto result = SemanticScanGraphBuilder(
+    auto reverse = reverse_importers_.iter()
+                       .map([](auto importers) {
+                           return importers->clone();
+                       })
+                       .collect<Vec<Vec<TargetId>>>();
+    auto result  = SemanticScanGraphBuilder(
         *ownership_, rstd::move(targets), rstd::move(reverse), owned_domains_.clone());
     result.units_.reserve(units_.len());
     for (const auto& unit : units_) result.units_.push(clone_unit(unit));
@@ -707,8 +708,11 @@ auto SemanticScanGraphBuilder::clone_builder() const -> SemanticScanGraphBuilder
     }
     result.headers_.reserve(headers_.len());
     for (const auto& header : headers_) {
-        auto paths = Vec<PathBuf>::with_capacity(header.paths.len());
-        for (const auto& path : header.paths) paths.push(path.clone());
+        auto paths = header.paths.iter()
+                         .map([](auto path) {
+                             return path->clone();
+                         })
+                         .collect<Vec<PathBuf>>();
         result.headers_.push(IncrementalHeaderArtifact {
             .physical_identity = header.physical_identity.clone(),
             .paths             = rstd::move(paths),

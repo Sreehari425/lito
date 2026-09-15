@@ -1014,16 +1014,12 @@ public:
         if (environment.is_err()) return Err(rstd::move(environment).unwrap_err());
         auto       projection = cpp::preprocessor_projection(compile_context);
         const auto contains   = [&](ref<str> value) {
-            for (const auto& directory : projection.user_include_directories) {
-                if (directory.as_str() == value) return true;
-            }
-            for (const auto& directory : projection.system_include_directories) {
-                if (directory.as_str() == value) return true;
-            }
-            for (const auto& directory : projection.framework_include_directories) {
-                if (directory.as_str() == value) return true;
-            }
-            return false;
+            return projection.user_include_directories.iter()
+                .chain(projection.system_include_directories.iter())
+                .chain(projection.framework_include_directories.iter())
+                .any([&](auto directory) {
+                    return directory->as_str() == value;
+                });
         };
         for (const auto& entry : (*environment)->include_search) {
             auto directory = entry.directory.as_path().to_string_lossy();

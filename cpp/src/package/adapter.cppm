@@ -291,10 +291,9 @@ auto output_name(ArtifactKind kind, ref<str> declared_name, const lito::system::
 }
 
 auto contains_source(const Vec<PathBuf>& sources, ref<rstd::path::Path> candidate) -> bool {
-    for (const auto& source : sources) {
-        if (source.as_path() == candidate) return true;
-    }
-    return false;
+    return sources.iter().any([&](auto source) {
+        return source->as_path() == candidate;
+    });
 }
 
 auto append_conditional_unique(Vec<String>& output, const Vec<String>& input) -> void {
@@ -737,12 +736,12 @@ auto clone_usage(const lito::dependency::DeclaredUsageRequirements& usage,
                  const LanguageArgumentLayer&                       arguments,
                  const LanguageArgumentLayer&                       interface_arguments,
                  const UsageLinkResolution&                         link) -> UsageRequirements {
-    auto include_requirements = Vec<lito::dependency::IncludeDirectoryRequirement>::with_capacity(
-        usage.private_include_directory_requirements.len());
-    for (const auto& requirement : usage.private_include_directory_requirements) {
-        include_requirements.push(requirement.clone());
-    }
-    auto public_definitions = as<Clone>(usage.public_definitions).clone();
+    auto include_requirements = usage.private_include_directory_requirements.iter()
+                                    .map([](auto requirement) {
+                                        return requirement->clone();
+                                    })
+                                    .collect<Vec<lito::dependency::IncludeDirectoryRequirement>>();
+    auto public_definitions   = as<Clone>(usage.public_definitions).clone();
     for (const auto& definition : usage.private_definitions) {
         if (is_cpp_standard_library_mode_macro(definition.as_str())) {
             public_definitions.push(definition.clone());
@@ -774,38 +773,50 @@ auto clone_dependencies(const Vec<DependencySpec>& dependencies) -> Vec<Dependen
 
 auto clone_host_tool_dependencies(const Vec<HostToolDependencySpec>& dependencies)
     -> Vec<HostToolDependencySpec> {
-    auto result = Vec<HostToolDependencySpec>::with_capacity(dependencies.len());
-    for (const auto& dependency : dependencies) result.push(dependency.clone());
+    auto result = dependencies.iter()
+                      .map([](auto dependency) {
+                          return dependency->clone();
+                      })
+                      .collect<Vec<HostToolDependencySpec>>();
     return result;
 }
 
 auto clone_proc_macro_dependencies(const Vec<ProcMacroDependencySpec>& dependencies)
     -> Vec<ProcMacroDependencySpec> {
-    auto result = Vec<ProcMacroDependencySpec>::with_capacity(dependencies.len());
-    for (const auto& dependency : dependencies) result.push(dependency.clone());
+    auto result = dependencies.iter()
+                      .map([](auto dependency) {
+                          return dependency->clone();
+                      })
+                      .collect<Vec<ProcMacroDependencySpec>>();
     return result;
 }
 
 auto clone_plugin_dependencies(const Vec<CompilerPluginDependencySpec>& dependencies)
     -> Vec<CompilerPluginDependencySpec> {
-    auto result = Vec<CompilerPluginDependencySpec>::with_capacity(dependencies.len());
-    for (const auto& dependency : dependencies) result.push(dependency.clone());
+    auto result = dependencies.iter()
+                      .map([](auto dependency) {
+                          return dependency->clone();
+                      })
+                      .collect<Vec<CompilerPluginDependencySpec>>();
     return result;
 }
 
 auto clone_external_dependencies(const Vec<ResolvedExternalDependency>& dependencies)
     -> Vec<ResolvedExternalDependency> {
-    auto result = Vec<ResolvedExternalDependency>::with_capacity(dependencies.len());
-    for (const auto& dependency : dependencies) result.push(dependency.clone());
+    auto result = dependencies.iter()
+                      .map([](auto dependency) {
+                          return dependency->clone();
+                      })
+                      .collect<Vec<ResolvedExternalDependency>>();
     return result;
 }
 
 auto clone_usage_requirements(const UsageRequirements& usage) -> UsageRequirements {
-    auto include_requirements = Vec<lito::dependency::IncludeDirectoryRequirement>::with_capacity(
-        usage.private_include_directory_requirements.len());
-    for (const auto& requirement : usage.private_include_directory_requirements) {
-        include_requirements.push(requirement.clone());
-    }
+    auto include_requirements = usage.private_include_directory_requirements.iter()
+                                    .map([](auto requirement) {
+                                        return requirement->clone();
+                                    })
+                                    .collect<Vec<lito::dependency::IncludeDirectoryRequirement>>();
     return UsageRequirements {
         .public_include_directories  = as<Clone>(usage.public_include_directories).clone(),
         .private_include_directories = as<Clone>(usage.private_include_directories).clone(),
@@ -927,10 +938,9 @@ auto library_targets(const lito::package::ResolvedPackageGraph& graph)
 
 auto selected_target(const Vec<lito::package::PackageTargetId>& selected,
                      const lito::package::PackageTargetId&      target) -> bool {
-    for (const auto& candidate : selected) {
-        if (candidate == target) return true;
-    }
-    return false;
+    return selected.iter().any([&](auto candidate) {
+        return (*candidate) == target;
+    });
 }
 
 auto resolve_source_groups(usize                                       package_index,
@@ -1026,10 +1036,9 @@ struct ExternalUsageCatalog {
     }
 
     auto all_consumed() const noexcept -> bool {
-        for (const auto& entry : packages) {
-            if (! entry.consumed) return false;
-        }
-        return true;
+        return packages.iter().all([&](auto entry) {
+            return entry->consumed;
+        });
     }
 };
 
@@ -1443,9 +1452,11 @@ auto adapt_package_graph_metadata(lito::package::ResolvedPackageGraph        gra
             });
         }
         if (! package.manifest.compile_tests.is_empty()) {
-            auto sources = Vec<PathBuf>::with_capacity(package.manifest.compile_tests.len());
-            for (const auto& test : package.manifest.compile_tests)
-                sources.push(test.source.clone());
+            auto sources              = package.manifest.compile_tests.iter()
+                                            .map([](auto test) {
+                                   return test->source.clone();
+                                            })
+                                            .collect<Vec<PathBuf>>();
             auto compile_dependencies = clone_dependencies(dependencies);
             auto compile_host_tool_dependencies =
                 clone_host_tool_dependencies(host_tool_dependencies);
@@ -1818,12 +1829,17 @@ auto snapshot_package(const PackageMetadata&          metadata,
             .compile_metadata      = target.compile_metadata.clone(),
         });
     }
-    auto profiles = Vec<ProfileSpec>::with_capacity(metadata.profiles.len());
-    for (const auto& profile : metadata.profiles) profiles.push(clone_profile(profile));
-    auto default_targets =
-        Vec<lito::package::PackageTargetId>::with_capacity(metadata.default_targets.len());
-    for (const auto& target : metadata.default_targets) default_targets.push(target.clone());
-    auto result = PackageSpec {
+    auto profiles        = metadata.profiles.iter()
+                               .map([](auto profile) {
+                            return clone_profile((*profile));
+                               })
+                               .collect<Vec<ProfileSpec>>();
+    auto default_targets = metadata.default_targets.iter()
+                               .map([](auto target) {
+                                   return target->clone();
+                               })
+                               .collect<Vec<lito::package::PackageTargetId>>();
+    auto result          = PackageSpec {
         .name            = metadata.name.clone(),
         .root            = metadata.root.clone(),
         .manifest_path   = metadata.manifest_path.clone(),

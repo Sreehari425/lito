@@ -98,8 +98,11 @@ struct ElfRunpath {
     Vec<OriginRelativeRuntimePath> paths;
 
     auto clone() const -> ElfRunpath {
-        auto result = Vec<OriginRelativeRuntimePath>::with_capacity(paths.len());
-        for (const auto& path : paths) result.push(path.clone());
+        auto result = paths.iter()
+                          .map([](auto path) {
+                              return path->clone();
+                          })
+                          .collect<Vec<OriginRelativeRuntimePath>>();
         return ElfRunpath { .paths = rstd::move(result) };
     }
 };

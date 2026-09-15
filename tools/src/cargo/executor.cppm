@@ -997,10 +997,9 @@ struct ParsedBinaryMessages {
 };
 
 auto binary_target(const PackageMetadata& metadata, ref<str> name) -> bool {
-    for (const auto& target : metadata.binaries) {
-        if (target.name == name) return true;
-    }
-    return false;
+    return metadata.binaries.iter().any([&](auto target) {
+        return target->name == name;
+    });
 }
 
 auto parse_binary_message(const Json&            message,

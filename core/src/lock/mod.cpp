@@ -80,10 +80,11 @@ auto locked_external_source(const lito::dependency::ResolvedExternalSource& sour
 }
 
 auto external_order_key(const lito::dependency::ResolvedExternalSourceRecord& external) -> String {
-    auto architectures = Vec<String>::with_capacity(external.architectures.len());
-    for (const auto& architecture : external.architectures) {
-        architectures.push(String::make(architecture_name(architecture)));
-    }
+    auto architectures = external.architectures.iter()
+                             .map([](auto architecture) {
+                                 return String::make(architecture_name((*architecture)));
+                             })
+                             .collect<Vec<String>>();
     rstd::slice_::sort_unstable(architectures.as_mut_slice().as_mut_ref());
     auto key = external.name.clone();
     for (const auto& architecture : architectures) {
@@ -174,10 +175,11 @@ auto graph_wire(const lito::package::ResolvedPackageGraph& graph, u64 format_ver
             const auto& external      = package.externals[external_index];
             auto        locked_source = locked_external_source(external.source);
             if (locked_source.is_none()) continue;
-            auto architectures = Vec<String>::with_capacity(external.architectures.len());
-            for (const auto& architecture : external.architectures) {
-                architectures.push(String::make(architecture_name(architecture)));
-            }
+            auto architectures = external.architectures.iter()
+                                     .map([](auto architecture) {
+                                         return String::make(architecture_name((*architecture)));
+                                     })
+                                     .collect<Vec<String>>();
             rstd::slice_::sort_unstable(architectures.as_mut_slice().as_mut_ref());
             auto optional_architectures = Option<Vec<String>> {};
             if (! architectures.is_empty()) {

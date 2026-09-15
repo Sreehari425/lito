@@ -81,6 +81,30 @@ protected:
     }
 };
 
+TEST(Config, BuildOptionClonePreservesOrderAndOwnership) {
+    auto original = lito::config::ProjectBuildOptions {};
+    original.cpp.push(lito::config::BuildOptionInput {
+        .arguments = strings("-Wall"_str, "-Wextra"_str), .source = String::make("first"_str) });
+    original.cpp.push(lito::config::BuildOptionInput { .arguments = strings("-O2"_str),
+                                                       .source    = String::make("second"_str) });
+    original.linker.push(lito::config::BuildOptionInput { .arguments = strings("-s"_str),
+                                                          .source    = String::make("link"_str) });
+    auto copied                                = original.clone();
+    original.cpp[usize {}].arguments[usize {}] = String::make("changed"_str);
+    original.cpp[usize(1)].source              = String::make("changed"_str);
+    original.linker[usize {}].arguments.clear();
+    ASSERT_EQ(copied.cpp.len(), usize(2));
+    ASSERT_EQ(copied.cpp[usize {}].arguments.len(), usize(2));
+    EXPECT_EQ(copied.cpp[usize {}].arguments[usize {}], "-Wall"_str);
+    EXPECT_EQ(copied.cpp[usize {}].arguments[usize(1)], "-Wextra"_str);
+    EXPECT_EQ(copied.cpp[usize {}].source, "first"_str);
+    EXPECT_EQ(copied.cpp[usize(1)].source, "second"_str);
+    EXPECT_TRUE(copied.c.is_empty());
+    ASSERT_EQ(copied.linker.len(), usize(1));
+    ASSERT_EQ(copied.linker[usize {}].arguments.len(), usize(1));
+    EXPECT_EQ(copied.linker[usize {}].arguments[usize {}], "-s"_str);
+}
+
 TEST_F(Config, RemovedConfigFieldsAreRejectedByConfigOwner) {
     struct RemovedField {
         ref<str> name;
@@ -234,7 +258,8 @@ TEST_F(Config, ToolchainOperatingSystemAndArchitectureAreConfiguredTogether) {
           "must be configured together with toolchain.arch at $.toolchain.os"_str },
         { "invalid-os"_str,
           "[toolchain]\nos = \"plan9\"\narch = \"x86_64\"\n"_str,
-          "must be one of 'linux', 'android', 'macos', 'windows', 'freebsd', 'netbsd', 'openbsd' "
+          "must be 'unknown' or one of 'linux', 'android', 'macos', 'windows', 'freebsd', "
+          "'netbsd', 'openbsd' "
           "at "
           "$.toolchain.os"_str },
         { "architecture-alias"_str,
@@ -1016,20 +1041,28 @@ TEST_F(Config, NonUtf8EnvironmentFlagsAreRejectedWithTheirVariableName) {
     EXPECT_TRUE(message.as_str().contains("not valid UTF-8"_str));
 }
 
-TEST_F(Config, RuntimeOverridesRejectKeyStructureConflicts) {
+TEST_F(Config, RuntimeOverridesReplaceScalarWithTable) {
     auto directory        = source_root("config-runtime-conflict"_str);
     auto config_directory = directory.join(PathBuf::from(".lito"_str).as_path());
     ASSERT_TRUE(rstd::fs::create_dir_all(config_directory.as_path()).is_ok());
     auto config = config_directory.join(PathBuf::from("config.toml"_str).as_path());
     ASSERT_TRUE(
         rstd::fs::write(config.as_path(), "toolchain = \"scalar\"\n"_str.as_bytes()).is_ok());
+    auto original = lito::config::load_project_config(directory.as_path());
+    ASSERT_TRUE(original.is_err());
+    EXPECT_TRUE(error_chain_text(original.unwrap_err())
+                    .as_str()
+                    .contains("type mismatch: expected map, found string at $.toolchain"_str));
     auto overrides = Vec<String>::make();
     overrides.push(String::make("toolchain.cxx=clang++"_str));
     auto loaded = lito::config::load_project_config(directory.as_path(),
                                                     lito::config::ProjectConfigRequest {
                                                         .overrides = rstd::move(overrides),
                                                     });
-    EXPECT_TRUE(loaded.is_err());
+    ASSERT_TRUE(loaded.is_ok());
+    EXPECT_EQ(loaded->toolchain.cxx.as_path(), PathBuf::from("clang++"_str).as_path());
+    auto persisted = lito::config::load_project_config(directory.as_path());
+    EXPECT_TRUE(persisted.is_err());
 }
 
 TEST_F(Config, PersistedConfigSetGetUnsetIsAtomicAndValidated) {

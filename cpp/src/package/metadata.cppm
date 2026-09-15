@@ -30,8 +30,11 @@ struct PackageCompileMetadata {
     Vec<PackageFeatureState> features;
 
     auto clone() const -> PackageCompileMetadata {
-        auto copied_features = Vec<PackageFeatureState>::with_capacity(features.len());
-        for (const auto& feature : features) copied_features.push(feature.clone());
+        auto copied_features = features.iter()
+                                   .map([](auto feature) {
+                                       return feature->clone();
+                                   })
+                                   .collect<Vec<PackageFeatureState>>();
         return PackageCompileMetadata {
             .version  = as<Clone>(version).clone(),
             .features = rstd::move(copied_features),

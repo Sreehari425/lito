@@ -144,8 +144,11 @@ struct ExternalAssetCatalog {
     }
 
     auto clone() const -> ExternalAssetCatalog {
-        auto copied = Vec<ExternalAssetSet>::with_capacity(sets.len());
-        for (const auto& set : sets) copied.push(set.clone());
+        auto copied = sets.iter()
+                          .map([](auto set) {
+                              return set->clone();
+                          })
+                          .collect<Vec<ExternalAssetSet>>();
         return ExternalAssetCatalog { .sets = rstd::move(copied) };
     }
 };

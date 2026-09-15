@@ -95,10 +95,9 @@ auto resource_identity(ref<rstd::path::Path> root, const Vec<PathBuf>& files)
 
 auto selected_resource_target(const Vec<lito::package::PackageTargetId>& selected,
                               const lito::package::PackageTargetId&      target) noexcept -> bool {
-    for (const auto& candidate : selected) {
-        if (candidate == target) return true;
-    }
-    return false;
+    return selected.iter().any([&](auto candidate) {
+        return (*candidate) == target;
+    });
 }
 
 } // namespace lito

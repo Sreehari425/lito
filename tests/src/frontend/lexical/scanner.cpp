@@ -123,6 +123,31 @@ struct FixtureLanguageB {
     }
 };
 
+constexpr auto valid_symbols_queries() -> bool {
+    const SymbolId symbols[] { FIXTURE_A_SHORT, FIXTURE_A_LONG };
+    const auto     valid = ValidSymbols { slice<SymbolId>::from_raw_parts(symbols, usize(2)) };
+    if (! valid.contains(FIXTURE_A_SHORT) || ! valid.contains(FIXTURE_A_LONG) ||
+        valid.contains(FIXTURE_A_WRONG) || valid.contains(FIXTURE_B_SHORT))
+        return false;
+    if (! valid.belongs_to(LanguageId::of<FixtureLanguageA>()) ||
+        valid.belongs_to(LanguageId::of<FixtureLanguageB>()))
+        return false;
+    const SymbolId mixed[] { FIXTURE_A_SHORT, FIXTURE_B_SHORT };
+    const auto     mixed_valid = ValidSymbols { slice<SymbolId>::from_raw_parts(mixed, usize(2)) };
+    if (mixed_valid.belongs_to(LanguageId::of<FixtureLanguageA>()) ||
+        mixed_valid.belongs_to(LanguageId::of<FixtureLanguageB>()))
+        return false;
+    const auto empty = ValidSymbols {};
+    return ! empty.contains(FIXTURE_A_SHORT) &&
+           empty.belongs_to(LanguageId::of<FixtureLanguageA>());
+}
+
+static_assert(valid_symbols_queries());
+
+TEST(LexicalScanner, ConstexprValidSymbolsQueries) {
+    EXPECT_TRUE(valid_symbols_queries());
+}
+
 struct FixtureScanner {
     auto scan(ScannerCursor& cursor, ValidSymbols valid_symbols)
         -> LexicalResult<Option<SymbolId>> {

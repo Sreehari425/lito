@@ -36,9 +36,11 @@ struct ProjectBuildOptions {
 
     auto clone() const -> ProjectBuildOptions {
         auto clone_inputs = [](const Vec<BuildOptionInput>& inputs) {
-            auto result = Vec<BuildOptionInput>::with_capacity(inputs.len());
-            for (const auto& input : inputs) result.push(input.clone());
-            return result;
+            return inputs.iter()
+                .map([](auto input) {
+                    return input->clone();
+                })
+                .collect<Vec<BuildOptionInput>>();
         };
         return ProjectBuildOptions {
             .cpp    = clone_inputs(cpp),

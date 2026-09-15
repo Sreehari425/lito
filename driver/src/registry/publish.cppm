@@ -240,10 +240,11 @@ auto object(const Json& value, ref<str> context, const RegistryPackageId& packag
 }
 
 auto known_field(ref<str> field, initializer_list<ref<str>> allowed) noexcept -> bool {
-    for (auto candidate : allowed) {
-        if (field == candidate) return true;
-    }
-    return false;
+    return rstd::iter::from_slice(
+               slice<ref<str>>::from_raw_parts(allowed.begin(), usize(allowed.size())))
+        .any([&](auto candidate) {
+            return field == (*candidate);
+        });
 }
 
 auto reject_unknown(const Json&                value,

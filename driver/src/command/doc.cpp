@@ -60,10 +60,9 @@ auto selected_package(const BuildSummary& summary, ref<str> name)
 auto selected_library_target(const BuildSummary&                   summary,
                              const lito::package::PackageTargetId& target) -> bool {
     if (target.kind != lito::package::PackageTargetKind::Library) return false;
-    for (const auto& selected : summary.selected_targets) {
-        if (selected == target) return true;
-    }
-    return false;
+    return summary.selected_targets.iter().any([&](auto selected) {
+        return (*selected) == target;
+    });
 }
 
 struct DocUnitPlan {
@@ -105,10 +104,11 @@ auto extraction_request_json(const BuildSummary&                 summary,
                      unit.logical_module.is_some() ? rstd::into<Json>(unit.logical_module->as_str())
                                                    : Json::Null());
 
-    auto arguments = JsonArray::with_capacity(unit.invocation.arguments.len());
-    for (const auto& argument : unit.invocation.arguments) {
-        arguments.push(rstd::into<Json>(argument.as_str()));
-    }
+    auto arguments  = unit.invocation.arguments.iter()
+                          .map([](auto argument) {
+                             return rstd::into<Json>(argument->as_str());
+                          })
+                          .collect<JsonArray>();
     auto invocation = JsonMap::make();
     invocation.insert(String::make("cwd"_str), Json::String(rstd::move(working)));
     invocation.insert(String::make("arguments"_str), Json::Array(rstd::move(arguments)));
@@ -388,10 +388,11 @@ auto site_manifest_json(const BuildSummary&     summary,
                         const Option<PathBuf>&  frontend,
                         bool                    data_only,
                         bool                    package_publication) -> DocResult<String> {
-    auto packages = Vec<PackageResponses>::make();
-    for (const auto& selected : summary.selected_packages) {
-        packages.push(PackageResponses { .package = rstd::addressof(selected) });
-    }
+    auto packages = summary.selected_packages.iter()
+                        .map([](auto selected) {
+                            return PackageResponses { .package = rstd::addressof((*selected)) };
+                        })
+                        .collect<Vec<PackageResponses>>();
     for (const auto& plan : plans) {
         const auto& unit = summary.documentation_units[plan.unit];
         for (auto& package : packages) {

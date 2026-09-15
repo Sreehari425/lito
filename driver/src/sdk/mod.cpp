@@ -402,10 +402,11 @@ auto descriptor_json(const InstalledSdkDescriptor& descriptor) -> Json {
     certification.insert(String::make("rtti"_str), Json::Bool(descriptor.certification.rtti));
 
     auto root       = JsonMap::make();
-    auto components = JsonArray::make();
-    for (const auto& component : descriptor.components) {
-        components.push(installed_component_json(component));
-    }
+    auto components = descriptor.components.iter()
+                          .map([](auto component) {
+                              return installed_component_json((*component));
+                          })
+                          .collect<JsonArray>();
     root.insert(String::make("schema"_str), Json::Number(rstd::json::Number::from_u64(u64(2))));
     root.insert(String::make("kind"_str), rstd::into<Json>("lito-llvm-sdk"_str));
     root.insert(String::make("version"_str), rstd::into<Json>(descriptor.version.as_str()));

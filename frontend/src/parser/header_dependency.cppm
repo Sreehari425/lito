@@ -20,8 +20,11 @@ public:
 
     auto finish(const preprocessor::PreprocessedTranslationUnit& translation)
         -> lexical::Result<FrontendResult> {
-        auto headers = Vec<rstd::path::PathBuf>::with_capacity(translation.header_inputs.len());
-        for (const auto& path : translation.header_inputs) headers.push(path.clone());
+        auto headers = translation.header_inputs.iter()
+                           .map([](auto path) {
+                               return path->clone();
+                           })
+                           .collect<Vec<rstd::path::PathBuf>>();
         return Ok(FrontendResult {
             .source = rstd::path::PathBuf::from(translation.sources.path(translation.main_source)),
             .header_inputs            = rstd::move(headers),

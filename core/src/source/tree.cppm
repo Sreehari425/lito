@@ -349,8 +349,11 @@ auto lito::source::SourceTree::extend(const SourceTree& other) -> SourceTreeResu
 }
 
 auto lito::source::SourceTree::clone() const -> SourceTree {
-    auto entries = Vec<SourceTreeEntry>::with_capacity(entries_.len());
-    for (const auto& entry : entries_) entries.push(entry.clone());
+    auto entries = entries_.iter()
+                       .map([](auto entry) {
+                           return entry->clone();
+                       })
+                       .collect<Vec<SourceTreeEntry>>();
     return SourceTree(rstd::move(entries));
 }
 
@@ -372,10 +375,9 @@ auto cleanup_materialization(ref<rstd::path::Path> destination) noexcept -> void
 
 auto contains_directory(slice<rstd::path::PathBuf> directories, ref<rstd::path::Path> path) noexcept
     -> bool {
-    for (const auto& directory : directories) {
-        if (directory.as_path() == path) return true;
-    }
-    return false;
+    return rstd::iter::from_slice(directories).any([&](auto directory) {
+        return directory->as_path() == path;
+    });
 }
 
 auto ensure_directories(ref<rstd::path::Path>     destination,

@@ -70,8 +70,11 @@ struct AndroidNdkRelease {
     Vec<AndroidNdkArtifact> artifacts;
 
     auto clone() const -> AndroidNdkRelease {
-        auto copied = Vec<AndroidNdkArtifact>::with_capacity(artifacts.len());
-        for (const auto& artifact : artifacts) copied.push(artifact.clone());
+        auto copied = artifacts.iter()
+                          .map([](auto artifact) {
+                              return artifact->clone();
+                          })
+                          .collect<Vec<AndroidNdkArtifact>>();
         return AndroidNdkRelease {
             .revision     = revision.clone(),
             .release_name = release_name.clone(),

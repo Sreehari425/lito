@@ -254,10 +254,9 @@ struct ToolSpec {
     }
 
     auto explicitly_configured(Tool tool) const noexcept -> bool {
-        for (const auto configured : configured_tools) {
-            if (configured == tool) return true;
-        }
-        return false;
+        return configured_tools.iter().any([&](auto configured) {
+            return (*configured) == tool;
+        });
     }
 
     auto clone() const -> ToolSpec {
