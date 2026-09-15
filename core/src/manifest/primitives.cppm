@@ -13,9 +13,7 @@ import :parse;
 using namespace rstd::prelude;
 using PathBuf = rstd::path::PathBuf;
 using namespace rstd::literals;
-using Toml         = rstd::toml::Value;
-using Table        = rstd::toml::Table;
-using KeyPredicate = bool (*)(ref<str>);
+using Toml = rstd::toml::Value;
 using namespace lito::manifest;
 
 template<typename T>
@@ -62,10 +60,6 @@ auto manifest_io_failure(ref<str>               node,
         String::make(node), String::make(operation), PathBuf::from(path), rstd::move(error)));
 }
 
-auto member(const Toml& value, ref<str> key) -> Option<ref<Toml>> {
-    return value.get(key);
-}
-
 auto canonical_existing(ref<rstd::path::Path> path, ref<str> context)
     -> ManifestSchemaResult<PathBuf> {
     auto canonical = rstd::fs::canonicalize(path);
@@ -76,67 +70,6 @@ auto canonical_existing(ref<rstd::path::Path> path, ref<str> context)
                                            rstd::move(canonical).unwrap_err()));
     }
     return Ok(rstd::move(canonical).unwrap());
-}
-
-auto table_value(const Toml& value, ref<str> context) -> ManifestSchemaResult<ref<Table>> {
-    return Ok(rstd_try(lito::parse::toml::table(value, lito::parse::NodePath::root(context))));
-}
-
-auto required_table(const Toml& document, ref<str> key, ref<str> context)
-    -> ManifestSchemaResult<ref<Table>> {
-    auto path  = lito::parse::NodePath::root(context);
-    auto value = rstd_try(lito::parse::toml::required_member(document, key, path));
-    return Ok(rstd_try(lito::parse::toml::table(*value, path.field(key))));
-}
-
-auto string_value(const Toml& value, ref<str> context) -> ManifestSchemaResult<String> {
-    return Ok(String::make(
-        rstd_try(lito::parse::toml::string(value, lito::parse::NodePath::root(context)))));
-}
-
-auto required_string(const Toml& table, ref<str> key, ref<str> context)
-    -> ManifestSchemaResult<String> {
-    auto path  = lito::parse::NodePath::root(context);
-    auto value = rstd_try(lito::parse::toml::required_member(table, key, path));
-    return Ok(String::make(rstd_try(lito::parse::toml::string(*value, path.field(key)))));
-}
-
-auto optional_string(const Toml& table, ref<str> key, ref<str> context)
-    -> ManifestSchemaResult<Option<String>> {
-    auto value = member(table, key);
-    if (value.is_none()) return Ok(Option<String> {});
-    auto parsed = string_value(**value, rstd::format("{}.{}", context, key).as_str());
-    if (parsed.is_err()) return Err(rstd::move(parsed).unwrap_err());
-    return Ok(Some(rstd::move(parsed).unwrap()));
-}
-
-auto string_array(Option<ref<Toml>> value, ref<str> context) -> ManifestSchemaResult<Vec<String>> {
-    auto result = Vec<String>::make();
-    if (value.is_none()) return Ok(rstd::move(result));
-    auto path  = lito::parse::NodePath::root(context);
-    auto array = rstd_try(lito::parse::toml::array(**value, path));
-    for (auto index = usize {}; index < array->len(); ++index) {
-        auto text = rstd_try(lito::parse::toml::string((*array)[index], path.index(index)));
-        result.push(String::make(text));
-    }
-    return Ok(rstd::move(result));
-}
-
-auto reject_unknown(const Table& table, ref<str> context, KeyPredicate allowed)
-    -> ManifestSchemaResult<empty> {
-    rstd_try(
-        lito::parse::toml::reject_unknown(table, lito::parse::NodePath::root(context), allowed));
-    return Ok(empty {});
-}
-
-auto package_root_key(ref<str> key) -> bool {
-    return key == "package"_str || key == "lib"_str || key == "plugin"_str || key == "pmacro"_str ||
-           key == "bin"_str || key == "test"_str || key == "bench"_str ||
-           key == "compile-test"_str || key == "usage"_str || key == "dependencies"_str ||
-           key == "dev-dependencies"_str || key == "runtime-dependencies"_str ||
-           key == "external-dependencies"_str || key == "external-sources"_str ||
-           key == "source-groups"_str || key == "build-tools"_str || key == "script"_str ||
-           key == "profile"_str || key == "when"_str || key == "features"_str;
 }
 
 auto parse_archive_url(ref<str> value, ref<str> context)
@@ -157,8 +90,4 @@ auto parse_manifest_sha256(ref<str> value, ref<str> context)
             rstd::format("{}.sha256 is invalid: {}", context, rstd::move(parsed).unwrap_err()));
     }
     return Ok(rstd::move(parsed).unwrap());
-}
-
-auto workspace_root_key(ref<str> key) -> bool {
-    return key == "workspace"_str || key == "profile"_str;
 }

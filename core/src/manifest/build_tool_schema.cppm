@@ -5,7 +5,6 @@ module lito.core:manifest.build_tool_schema;
 
 import rstd;
 import rstd.serde;
-import rstd.toml;
 import :manifest.build_tool;
 import :manifest.convention;
 import :manifest.error;
@@ -20,7 +19,6 @@ using namespace rstd::literals;
 using namespace lito::manifest;
 using namespace lito::system;
 using PathBuf = rstd::path::PathBuf;
-using Toml    = rstd::toml::Value;
 
 auto exact_build_tool_version(ref<str> value) noexcept -> bool {
     if (value.is_empty() || value.trim_ascii() != value || value == "latest"_str) return false;
@@ -72,12 +70,12 @@ auto parse_host_key(ref<str> value, rstd::serde::DataPath path) -> ManifestSchem
     });
 }
 
-auto parse_build_tools(Option<ref<Toml>> value) -> ManifestSchemaResult<Vec<BuildToolRequirement>> {
+auto parse_build_tools(Option<wire::BuildTools> value)
+    -> ManifestSchemaResult<Vec<BuildToolRequirement>> {
     auto result = Vec<BuildToolRequirement>::make();
     if (value.is_none()) return Ok(rstd::move(result));
-    auto root = rstd::serde::DataPath().with_field("build-tools"_str);
-    auto tools =
-        rstd_try(decode_manifest_value<lito::manifest::wire::BuildTools>(**value, root.clone()));
+    auto root  = rstd::serde::DataPath().with_field("build-tools"_str);
+    auto tools = rstd::move(value).unwrap();
     for (auto alias_ref : tools.keys()) {
         const auto& alias      = *alias_ref;
         auto        alias_path = root.with_map_key(alias.as_str());

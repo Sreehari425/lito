@@ -29,6 +29,240 @@ protected:
     }
 };
 
+TEST_F(Manifest, TypedFieldSchemasRejectInvalidModesAndKeepPaths) {
+    using Kind = rstd::serde::ErrorKind;
+    struct Case {
+        ref<str> input;
+        Kind     kind;
+        ref<str> path;
+    };
+    const Case cases[] = {
+        { R"toml(bin = [{name="bin", resources=[], attach=[]}])toml"_str,
+          Kind::UnknownField,
+          "bin[0].attach"_str },
+        { R"toml(test = [{name="test", resources=[]}])toml"_str,
+          Kind::UnknownField,
+          "test[0].resources"_str },
+        { R"toml(bench = [{name="bench", host-tool=false}])toml"_str,
+          Kind::UnknownField,
+          "bench[0].host-tool"_str },
+        { R"toml(plugin = {module="plugin", name="other"})toml"_str,
+          Kind::UnknownField,
+          "plugin.name"_str },
+        { R"toml(pmacro = {module="pmacro", link-stdlib=false})toml"_str,
+          Kind::UnknownField,
+          "pmacro.link-stdlib"_str },
+        { R"toml(bin = [{sources=["main.cpp"]}])toml"_str, Kind::MissingField, "bin[0].name"_str },
+        { R"toml(bin = [{name="bin", link-stdlib="false"}])toml"_str,
+          Kind::TypeMismatch,
+          "bin[0].link-stdlib"_str },
+        { R"toml(usage = {threads="false"})toml"_str, Kind::TypeMismatch, "usage.threads"_str },
+        { R"toml(usage = {private-include-directories=[{path="inc", other=true}]})toml"_str,
+          Kind::UnknownField,
+          "usage.private-include-directories[0].other"_str },
+        { R"toml(when = [{condition="os == \"linux\""}])toml"_str,
+          Kind::MissingField,
+          "when[0].usage"_str },
+        { R"toml(when = [{condition="os == \"linux\"", usage={threads=1}}])toml"_str,
+          Kind::TypeMismatch,
+          "when[0].usage.threads"_str },
+        { R"toml(compile-test = {})toml"_str, Kind::MissingField, "compile-test.cases"_str },
+        { R"toml(dependencies.dep = {workspace=true, path="../dep"})toml"_str,
+          Kind::UnknownField,
+          "dependencies.dep.path"_str },
+        { R"toml(dev-dependencies.dep = {path="../dep", visibility="private"})toml"_str,
+          Kind::UnknownField,
+          "dev-dependencies.dep.visibility"_str },
+        { R"toml(dev-dependencies.dep = "0.1.0")toml"_str,
+          Kind::TypeMismatch,
+          "dev-dependencies.dep"_str },
+        { R"toml(runtime-dependencies.dep = "0.1.0")toml"_str,
+          Kind::TypeMismatch,
+          "runtime-dependencies.dep"_str },
+        { R"toml(runtime-dependencies.dep = {path="../dep", pub=false})toml"_str,
+          Kind::UnknownField,
+          "runtime-dependencies.dep.pub"_str },
+        { R"toml(runtime-dependencies.dep = {workspace=true, features=[]})toml"_str,
+          Kind::UnknownField,
+          "runtime-dependencies.dep.features"_str },
+        { R"toml(external-sources.dep = {workspace=true, git="https://example.invalid/repo"})toml"_str,
+          Kind::UnknownField,
+          "external-sources.dep.git"_str },
+        { R"toml(external-sources.dep.archives.x86_64 = {archive="https://example.invalid/archive"})toml"_str,
+          Kind::MissingField,
+          "external-sources.dep.archives.x86_64.sha256"_str },
+        { R"toml(external-dependencies.pkg-config.dep = {workspace=true, module="dep"})toml"_str,
+          Kind::UnknownField,
+          "external-dependencies.pkg-config.dep.module"_str },
+        { R"toml(external-dependencies.pkg-config.dep = {static=false})toml"_str,
+          Kind::MissingField,
+          "external-dependencies.pkg-config.dep.module"_str },
+        { R"toml(external-dependencies.cmake.dep = {workspace=true, targets=[{name="dep"}], components=[]})toml"_str,
+          Kind::UnknownField,
+          "external-dependencies.cmake.dep.components"_str },
+        { R"toml(external-dependencies.cmake.dep = {package="dep", targets=[{name="dep", extra=true}]})toml"_str,
+          Kind::UnknownField,
+          "external-dependencies.cmake.dep.targets[0].extra"_str },
+        { R"toml(external-dependencies.cargo.dep = {workspace=true, source="dep"})toml"_str,
+          Kind::UnknownField,
+          "external-dependencies.cargo.dep.source"_str },
+        { R"toml(external-dependencies.cargo.dep = {source="dep"})toml"_str,
+          Kind::MissingField,
+          "external-dependencies.cargo.dep.package"_str },
+        { R"toml(profile.release = {unknown=true})toml"_str,
+          Kind::UnknownField,
+          "profile.release.unknown"_str },
+        { R"toml(profile.base = {opt-level=1})toml"_str,
+          Kind::UnknownField,
+          "profile.base.opt-level"_str },
+        { R"toml(unexpected = {})toml"_str, Kind::UnknownField, "unexpected"_str },
+        { R"toml(dependencies.dep = {workspace=false})toml"_str,
+          Kind::InvalidValue,
+          "dependencies.dep.workspace"_str },
+        { R"toml(external-sources.dep = {workspace=false})toml"_str,
+          Kind::InvalidValue,
+          "external-sources.dep.workspace"_str },
+    };
+    auto case_index = usize {};
+    for (const auto& item : cases) {
+        SCOPED_TRACE(item.input);
+        auto contents =
+            rstd::format("package = {{name=\"schema\", version=\"0.1.0\"}}\nlib = "
+                         "{{name=\"schema\", module=\"schema\", archive=\"schema\"}}\n{}\n",
+                         item.input);
+        auto project =
+            manifest(rstd::format("schema-invalid-{}", case_index++).as_str(), contents.as_str());
+        ASSERT_TRUE(project.is_ok());
+        auto loaded = lito::manifest::load_manifest_document(project->root.as_path());
+        ASSERT_TRUE(loaded.is_err());
+        const auto& error = loaded.unwrap_err();
+        ASSERT_TRUE(error.is_File());
+        ASSERT_TRUE(error.as_File().source.cause.is_Schema());
+        const auto& schema = error.as_File().source.cause.as_Schema().source;
+        ASSERT_TRUE(schema.is_Data());
+        const auto& data = schema.as_Data().source;
+        EXPECT_EQ(data.kind(), item.kind);
+        auto path = String::make();
+        for (const auto& segment : data.path().segments()) {
+            if (segment.kind() == rstd::serde::PathSegmentKind::Index) {
+                path.push_str(rstd::format("[{}]", segment.index()).as_str());
+            } else {
+                if (! path.is_empty()) path.push_str("."_str);
+                path.push_str(segment.name().unwrap());
+            }
+        }
+        EXPECT_EQ(path.as_str(), item.path);
+    }
+}
+
+TEST_F(Manifest, TypedWorkspaceSchemasKeepDefinitionRestrictions) {
+    const ref<str> cases[] = {
+        R"toml(dependencies.dep = {version="0.1.0", workspace=true})toml"_str,
+        R"toml(dependencies.dep = {path="../dep", features=[]})toml"_str,
+        R"toml(external-sources.dep = {workspace=true})toml"_str,
+        R"toml(external-dependencies.pkg-config.dep = {module="dep", usage="link"})toml"_str,
+        R"toml(external-dependencies.cmake.dep = {package="dep", targets=[]})toml"_str,
+        R"toml(external-dependencies.cargo.dep = {package="dep", source="dep", features=[]})toml"_str,
+        R"toml(package = {version={workspace=true}})toml"_str,
+        R"toml(default-members = [])toml"_str,
+    };
+    auto case_index = usize {};
+    for (auto input : cases) {
+        SCOPED_TRACE(input);
+        auto contents =
+            rstd::format("[workspace]\nname=\"schema\"\nmembers=[\"pkg\"]\n{}\n", input);
+        auto project = manifest(rstd::format("workspace-schema-invalid-{}", case_index++).as_str(),
+                                contents.as_str());
+        ASSERT_TRUE(project.is_ok());
+        EXPECT_TRUE(lito::manifest::load_manifest_document(project->root.as_path()).is_err());
+    }
+}
+
+TEST_F(Manifest, TypedSchemasPreserveExplicitFalseEmptyAndLegacyScalarUsage) {
+    auto project = manifest("schema-presence"_str, R"toml(
+[package]
+name = "schema"
+version = "0.1.0"
+readme = false
+[lib]
+name = "schema"
+module = "schema"
+archive = "schema"
+[dependencies.dep]
+workspace = true
+features = []
+default-features = false
+pub = false
+[usage]
+threads = false
+[runtime-dependencies.runtime]
+path = "../runtime"
+features = {ignored = true}
+default-features = "ignored"
+[[when]]
+condition = 'target.os == "linux"'
+usage = {threads=false}
+[external-dependencies.pkg-config.sys]
+module = "sys"
+visibility = "private"
+usage = "compile"
+[external-dependencies.cargo.rust]
+source = "rust"
+package = "rust"
+visibility = "private"
+usage = "link"
+[external-sources.rust]
+path = "../rust"
+)toml"_str);
+    ASSERT_TRUE(project.is_ok());
+    auto package = lito::manifest::load_package_manifest(project->root.as_path());
+    ASSERT_TRUE(package.is_ok()) << (package.is_err() ? rstd::format("{}", package.unwrap_err())
+                                                      : String::make());
+    EXPECT_EQ(package->readme.source, lito::manifest::PackageReadmeSource::Disabled);
+    ASSERT_EQ(package->workspace_dependencies.len(), usize(1));
+    const auto& dependency = package->workspace_dependencies[usize {}];
+    ASSERT_TRUE(dependency.features.is_some());
+    EXPECT_TRUE(dependency.features->is_empty());
+    ASSERT_TRUE(dependency.default_features.is_some());
+    EXPECT_FALSE(*dependency.default_features);
+    ASSERT_TRUE(dependency.is_public.is_some());
+    EXPECT_FALSE(*dependency.is_public);
+    ASSERT_EQ(package->conditions.len(), usize(1));
+    EXPECT_TRUE(package->conditions[usize {}].usage.declares_threads);
+    EXPECT_FALSE(package->conditions[usize {}].usage.values.threads);
+}
+
+TEST_F(Manifest, EmbeddedManifestKeepsSourceRootOwnedByItsSourceTree) {
+    const ProjectFile files[] = {
+        { "lito.toml"_str, R"toml(
+[package]
+name = "embedded"
+version = "0.1.0"
+source-root = {ignored = true}
+readme = false
+[lib]
+name = "embedded"
+module = "embedded"
+archive = "embedded"
+)toml"_str },
+    };
+    auto tree = source_tree(files);
+    ASSERT_TRUE(tree.is_ok());
+    auto embedded = lito::manifest::load_package_manifest_from_source_tree("embedded"_str, *tree);
+    ASSERT_TRUE(embedded.is_ok());
+    EXPECT_EQ(embedded->source_root.as_path(), embedded->root.as_path());
+    auto project = materialize("local-source-root"_str, *tree);
+    ASSERT_TRUE(project.is_ok());
+    auto local = lito::manifest::load_package_manifest(project->root.as_path());
+    ASSERT_TRUE(local.is_err());
+    const auto& error = local.unwrap_err();
+    ASSERT_TRUE(error.is_File());
+    ASSERT_TRUE(error.as_File().source.cause.is_Schema());
+    const auto& schema = error.as_File().source.cause.as_Schema().source;
+    ASSERT_TRUE(schema.is_Data());
+    EXPECT_EQ(schema.as_Data().source.kind(), rstd::serde::ErrorKind::TypeMismatch);
+}
+
 TEST_F(Manifest, PackageAndWorkspaceMetadataAreOwnedByManifest) {
     auto package_project = manifest("package-license"_str, R"toml([package]
 name = "fixture-package-license"
@@ -1422,11 +1656,13 @@ TEST_F(Manifest, ManifestSchemaErrorRetainsFileAndNodeOwnership) {
               project->root.join(PathBuf::from("lito.toml"_str).as_path()).as_path());
     ASSERT_TRUE(file.cause.is_Schema());
     const auto& schema = file.cause.as_Schema().source;
-    ASSERT_TRUE(schema.is_Parse());
-    const auto& parse = schema.as_Parse().source;
-    ASSERT_TRUE(parse.is_UnknownField());
-    EXPECT_EQ(rstd::format("{}", parse.as_UnknownField().node), "manifest.lib"_str);
-    EXPECT_EQ(parse.as_UnknownField().field.as_str(), "discovery"_str);
+    ASSERT_TRUE(schema.is_Data());
+    const auto& data = schema.as_Data().source;
+    EXPECT_EQ(data.kind(), rstd::serde::ErrorKind::UnknownField);
+    auto segments = data.path().segments();
+    ASSERT_EQ(segments.len(), usize(2));
+    EXPECT_EQ(segments[usize {}].name().unwrap(), "lib"_str);
+    EXPECT_EQ(segments[usize(1)].name().unwrap(), "discovery"_str);
 
     auto manifest_source = as<rstd::error::Error>(error).source();
     ASSERT_TRUE(manifest_source.is_some());

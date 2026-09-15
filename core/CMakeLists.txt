@@ -47,7 +47,7 @@ target_sources(
          src/manifest/convention.cppm
          src/manifest/conditional.cppm
          src/manifest/dependency_schema.cppm
-         src/manifest/key_schema.cppm
+         src/manifest/package_schema.cppm
          src/manifest/error.cppm
          src/manifest/locator.cppm
          src/manifest/language.cppm
@@ -67,6 +67,12 @@ target_sources(
          src/manifest/target_schema.cppm
          src/manifest/workspace.cppm
          src/manifest/wire.cppm
+         src/manifest/wire/target.cppm
+         src/manifest/wire/common.cppm
+         src/manifest/wire/dependency.cppm
+         src/manifest/wire/external.cppm
+         src/manifest/wire/profile.cppm
+         src/manifest/wire/document.cppm
          src/package/error.cppm
          src/package/features.cppm
          src/package/graph.cppm

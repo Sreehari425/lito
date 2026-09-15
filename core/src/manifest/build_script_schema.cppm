@@ -5,7 +5,6 @@ module lito.core:manifest.build_script_schema;
 
 import rstd;
 import rstd.serde;
-import rstd.toml;
 import :manifest.build_script;
 import :manifest.error;
 import :manifest.primitives;
@@ -15,7 +14,6 @@ import :source.tree;
 using namespace rstd::prelude;
 using namespace rstd::literals;
 using PathBuf = rstd::path::PathBuf;
-using Toml    = rstd::toml::Value;
 using namespace lito::manifest;
 
 auto source_tree_file(const lito::source::SourceTree& tree, ref<str> path) -> bool {
@@ -51,14 +49,13 @@ auto validate_script_entry(ref<rstd::path::Path>                 root,
     return Ok(empty {});
 }
 
-auto parse_script_package(Option<ref<Toml>>                     value,
+auto parse_script_package(Option<wire::Script>                  value,
                           ref<rstd::path::Path>                 root,
                           Option<ref<lito::source::SourceTree>> embedded)
     -> ManifestSchemaResult<Option<ScriptPackageManifest>> {
     if (value.is_none()) return Ok(Option<ScriptPackageManifest> {});
     auto path = rstd::serde::DataPath().with_field("script"_str);
-    auto wire =
-        rstd_try(decode_manifest_value<lito::manifest::wire::Script>(**value, path.clone()));
+    auto wire = rstd::move(value).unwrap();
     if (wire.supports.is_empty()) {
         return manifest_data_failure<Option<ScriptPackageManifest>>(path.with_field("supports"_str),
                                                                     "must not be empty"_str);

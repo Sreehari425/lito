@@ -5,12 +5,15 @@ module lito.core;
 
 import rstd;
 import rstd.toml;
+import rstd.serde;
+import :manifest.wire.common;
+import :manifest.package_schema;
 import :manifest;
 import :package.identity;
 import lito.system;
 import :manifest.primitives;
 import :manifest.profile_schema;
-import :manifest.key_schema;
+import :manifest.wire.document;
 import :manifest.convention;
 import :manifest.target_schema;
 import :manifest.dependency_schema;
@@ -224,123 +227,69 @@ auto assemble_manifest_document(PathBuf                               root,
                                 Toml                                  document,
                                 Option<ref<lito::source::SourceTree>> embedded_source = None())
     -> ManifestSchemaResult<ManifestDocument> {
-    auto root_table = table_value(document, "manifest root"_str);
-    if (root_table.is_err()) return Err(rstd::move(root_table).unwrap_err());
-
-    auto workspace_value = member(document, "workspace"_str);
-    if (workspace_value.is_some()) {
-        auto root_known = reject_unknown(**root_table, "manifest root"_str, workspace_root_key);
-        if (root_known.is_err()) return Err(rstd::move(root_known).unwrap_err());
-        auto workspace_table = table_value(**workspace_value, "manifest.workspace"_str);
-        if (workspace_table.is_err()) {
-            return Err(rstd::move(workspace_table).unwrap_err());
-        }
-        auto workspace_known =
-            reject_unknown(**workspace_table, "manifest.workspace"_str, workspace_key);
-        if (workspace_known.is_err()) {
-            return Err(rstd::move(workspace_known).unwrap_err());
-        }
-        auto workspace_name = required_string(**workspace_value, "name"_str, "workspace"_str);
-        if (workspace_name.is_err()) return Err(rstd::move(workspace_name).unwrap_err());
-        if (! package_name_is_valid(workspace_name->as_str())) {
+    auto decode = [&]<bool Embedded>() -> ManifestSchemaResult<wire::Document> {
+        auto input = rstd_try(decode_manifest_value<wire::DocumentInput<Embedded>>(
+            document, rstd::serde::DataPath()));
+        return Ok(rstd::move(input.value));
+    };
+    auto input = rstd_try(embedded_source.is_some() ? decode.template operator()<true>()
+                                                    : decode.template operator()<false>());
+    if (input.workspace.is_some()) {
+        auto workspace_value = rstd::move(input.workspace).unwrap();
+        auto workspace_name  = rstd::move(workspace_value.name);
+        if (! package_name_is_valid(workspace_name.as_str())) {
             return manifest_schema_failure<ManifestDocument>(
                 "workspace.name must contain only ASCII letters, digits, '-' or '_'"_str);
         }
-        auto members =
-            declared_paths(member(**workspace_value, "members"_str), "workspace.members"_str, true);
-        auto default_member_value = member(**workspace_value, "default-members"_str);
-        auto default_members      = declared_paths(
-            default_member_value, "workspace.default-members"_str, default_member_value.is_some());
+        auto members = declared_paths(
+            Some(rstd::move(workspace_value.members)), "workspace.members"_str, true);
+        const auto has_default_members  = workspace_value.default_members.is_some();
+        auto       default_member_value = rstd::move(workspace_value.default_members);
+        auto       default_members      = declared_paths(
+            rstd::move(default_member_value), "workspace.default-members"_str, has_default_members);
         if (members.is_err()) return Err(rstd::move(members).unwrap_err());
         if (default_members.is_err()) {
             return Err(rstd::move(default_members).unwrap_err());
         }
         auto package_defaults        = WorkspacePackageDefaults {};
-        auto workspace_package_value = member(**workspace_value, "package"_str);
+        auto workspace_package_value = rstd::move(workspace_value.package);
         if (workspace_package_value.is_some()) {
-            auto workspace_package_table =
-                table_value(**workspace_package_value, "manifest.workspace.package"_str);
-            if (workspace_package_table.is_err()) {
-                return Err(rstd::move(workspace_package_table).unwrap_err());
-            }
-            auto workspace_package_known = reject_unknown(
-                **workspace_package_table, "manifest.workspace.package"_str, workspace_package_key);
-            if (workspace_package_known.is_err()) {
-                return Err(rstd::move(workspace_package_known).unwrap_err());
-            }
-            auto workspace_version =
-                optional_string(**workspace_package_value, "version"_str, "workspace.package"_str);
-            if (workspace_version.is_err()) {
-                return Err(rstd::move(workspace_version).unwrap_err());
-            }
-            if (workspace_version->is_some() && (**workspace_version).is_empty()) {
-                return manifest_schema_failure<ManifestDocument>(
-                    "workspace.package.version must not be empty"_str);
-            }
-            auto workspace_license =
-                optional_string(**workspace_package_value, "license"_str, "workspace.package"_str);
-            if (workspace_license.is_err()) {
-                return Err(rstd::move(workspace_license).unwrap_err());
-            }
-            if (workspace_license->is_some() && (**workspace_license).is_empty()) {
-                return manifest_schema_failure<ManifestDocument>(
-                    "workspace.package.license must not be empty"_str);
-            }
-            auto workspace_authors       = Option<Vec<String>> {};
-            auto workspace_authors_value = member(**workspace_package_value, "authors"_str);
-            if (workspace_authors_value.is_some()) {
-                workspace_authors = Some(rstd_try(
-                    parse_author_list(workspace_authors_value, "workspace.package.authors"_str)));
-            }
-            auto workspace_description = optional_string(
-                **workspace_package_value, "description"_str, "workspace.package"_str);
-            if (workspace_description.is_err()) {
-                return Err(rstd::move(workspace_description).unwrap_err());
-            }
-            auto workspace_repository = optional_string(
-                **workspace_package_value, "repository"_str, "workspace.package"_str);
-            if (workspace_repository.is_err()) {
-                return Err(rstd::move(workspace_repository).unwrap_err());
-            }
-            auto workspace_documentation = optional_string(
-                **workspace_package_value, "documentation"_str, "workspace.package"_str);
-            if (workspace_documentation.is_err()) {
-                return Err(rstd::move(workspace_documentation).unwrap_err());
-            }
+            auto       defaults          = rstd::move(workspace_package_value).unwrap();
             const auto require_non_empty = [](const Option<String>& value,
                                               ref<str> context) -> ManifestSchemaResult<empty> {
-                if (value.is_some() && value->is_empty()) {
+                if (value.is_some() && value->is_empty())
                     return manifest_schema_failure<empty>(
                         rstd::format("{} must not be empty", context));
-                }
                 return Ok(empty {});
             };
+            rstd_try(require_non_empty(defaults.version, "workspace.package.version"_str));
+            rstd_try(require_non_empty(defaults.license, "workspace.package.license"_str));
+            rstd_try(require_non_empty(defaults.description, "workspace.package.description"_str));
+            rstd_try(require_non_empty(defaults.repository, "workspace.package.repository"_str));
             rstd_try(
-                require_non_empty(*workspace_description, "workspace.package.description"_str));
-            rstd_try(require_non_empty(*workspace_repository, "workspace.package.repository"_str));
-            rstd_try(
-                require_non_empty(*workspace_documentation, "workspace.package.documentation"_str));
-            auto workspace_readme          = rstd_try(parse_workspace_package_readme(
-                member(**workspace_package_value, "readme"_str), root.as_path()));
-            package_defaults.version       = rstd::move(workspace_version).unwrap();
-            package_defaults.license       = rstd::move(workspace_license).unwrap();
-            package_defaults.authors       = rstd::move(workspace_authors);
-            package_defaults.description   = rstd::move(workspace_description).unwrap();
-            package_defaults.repository    = rstd::move(workspace_repository).unwrap();
-            package_defaults.documentation = rstd::move(workspace_documentation).unwrap();
-            package_defaults.readme        = rstd::move(workspace_readme);
+                require_non_empty(defaults.documentation, "workspace.package.documentation"_str));
+            if (defaults.authors.is_some())
+                package_defaults.authors = Some(rstd_try(parse_author_list(
+                    rstd::move(defaults.authors).unwrap(), "workspace.package.authors"_str)));
+            package_defaults.readme = rstd_try(
+                parse_workspace_package_readme(rstd::move(defaults.readme), root.as_path()));
+            package_defaults.version       = rstd::move(defaults.version);
+            package_defaults.license       = rstd::move(defaults.license);
+            package_defaults.description   = rstd::move(defaults.description);
+            package_defaults.repository    = rstd::move(defaults.repository);
+            package_defaults.documentation = rstd::move(defaults.documentation);
         }
         auto workspace_dependencies =
-            rstd_try(parse_workspace_dependencies(member(**workspace_value, "dependencies"_str)));
+            rstd_try(parse_workspace_dependencies(rstd::move(workspace_value.dependencies)));
         auto workspace_external_sources = rstd_try(
-            parse_workspace_external_sources(member(**workspace_value, "external-sources"_str)));
+            parse_workspace_external_sources(rstd::move(workspace_value.external_sources)));
         auto external_dependencies = rstd_try(parse_workspace_external_dependencies(
-            member(**workspace_value, "external-dependencies"_str)));
-        auto profile = rstd_try(parse_project_profile(member(document, "profile"_str)));
+            rstd::move(workspace_value.external_dependencies)));
+        auto profile               = rstd_try(parse_project_profile(rstd::move(input.profile)));
         return Ok(ManifestDocument {
             .kind      = ManifestKind::Workspace,
             .workspace = Some(WorkspaceManifest {
-                .name                             = rstd::move(workspace_name).unwrap(),
+                .name                             = rstd::move(workspace_name),
                 .root                             = rstd::move(root),
                 .manifest_path                    = rstd::move(path),
                 .profile                          = rstd::move(profile),
@@ -356,55 +305,43 @@ auto assemble_manifest_document(PathBuf                               root,
         });
     }
 
-    auto root_known = reject_unknown(**root_table, "manifest root"_str, package_root_key);
-    if (root_known.is_err()) return Err(rstd::move(root_known).unwrap_err());
-    auto package_table = required_table(document, "package"_str, "manifest"_str);
-    if (package_table.is_err()) return Err(rstd::move(package_table).unwrap_err());
-    auto package_known =
-        reject_unknown(**package_table, "manifest.package"_str, manifest_package_key);
-    if (package_known.is_err()) return Err(rstd::move(package_known).unwrap_err());
-
-    const auto& package_value = **member(document, "package"_str);
-    auto        name          = required_string(package_value, "name"_str, "package"_str);
-    if (name.is_err()) return Err(rstd::move(name).unwrap_err());
-    if (! package_name_is_valid(name->as_str())) {
+    auto package_value = rstd::move(input.package).unwrap();
+    auto name          = rstd::move(package_value.name);
+    if (! package_name_is_valid(name.as_str())) {
         return manifest_schema_failure<ManifestDocument>(
             "package.name must contain only ASCII letters, digits, '-' or '_'"_str);
     }
-    auto standard = rstd_try(parse_package_standard(package_value));
+    auto standard = rstd_try(parse_package_standard(rstd::move(package_value.standard)));
     auto target_language =
         standard.is_some() ? package_standard_language(*standard) : PackageLanguage::Cpp;
-    auto library = rstd_try(parse_library_target(member(document, "lib"_str), target_language));
-    auto plugin  = rstd_try(
-        parse_plugin_target(member(document, "plugin"_str), name->as_str(), target_language));
-    auto proc_macro = rstd_try(
-        parse_pmacro_target(member(document, "pmacro"_str), name->as_str(), target_language));
-    auto bins    = rstd_try(parse_runnable_targets(member(document, "bin"_str),
+    auto library = rstd_try(parse_library_target(rstd::move(input.lib), target_language));
+    auto plugin =
+        rstd_try(parse_plugin_target(rstd::move(input.plugin), name.as_str(), target_language));
+    auto proc_macro =
+        rstd_try(parse_pmacro_target(rstd::move(input.pmacro), name.as_str(), target_language));
+    auto bins    = rstd_try(parse_runnable_targets(rstd::move(input.bin),
                                                    lito::package::PackageTargetKind::Binary,
                                                    "bin"_str,
                                                    target_language));
-    auto tests   = rstd_try(parse_runnable_targets(member(document, "test"_str),
+    auto tests   = rstd_try(parse_runnable_targets(rstd::move(input.test),
                                                    lito::package::PackageTargetKind::Test,
                                                    "test"_str,
                                                    target_language));
-    auto benches = rstd_try(parse_runnable_targets(member(document, "bench"_str),
+    auto benches = rstd_try(parse_runnable_targets(rstd::move(input.bench),
                                                    lito::package::PackageTargetKind::Benchmark,
                                                    "bench"_str,
                                                    target_language));
-    auto script  = rstd_try(
-        parse_script_package(member(document, "script"_str), root.as_path(), embedded_source));
+    auto script =
+        rstd_try(parse_script_package(rstd::move(input.script), root.as_path(), embedded_source));
 
-    auto compile_tests      = Vec<CompileTestCase>::make();
-    auto compile_test_value = member(document, "compile-test"_str);
-    if (compile_test_value.is_some()) {
-        auto table = rstd_try(table_value(**compile_test_value, "manifest.compile-test"_str));
-        rstd_try(reject_unknown(*table, "manifest.compile-test"_str, compile_test_key));
-        compile_tests = rstd_try(parse_compile_tests(member(**compile_test_value, "cases"_str)));
-    }
+    auto compile_tests = Vec<CompileTestCase>::make();
+    if (input.compile_test.is_some())
+        compile_tests = rstd_try(parse_compile_tests(rstd::move(input.compile_test->cases)));
 
-    auto source_root = embedded_source.is_some()
-                           ? Ok(root.clone())
-                           : resolve_package_source_root(package_value, root.as_path());
+    auto source_root =
+        embedded_source.is_some()
+            ? Ok(root.clone())
+            : resolve_package_source_root(rstd::move(package_value.source_root), root.as_path());
     if (source_root.is_err()) return Err(rstd::move(source_root).unwrap_err());
     auto install_script = embedded_source.is_some() ? Ok(Option<PathBuf> {})
                                                     : discover_install_script(root.as_path());
@@ -469,40 +406,41 @@ auto assemble_manifest_document(PathBuf                               root,
     const auto version_optional = install_script->is_none() && ! has_library && ! has_plugin &&
                                   ! has_proc_macro && ! has_bins && ! has_benches &&
                                   script.is_none();
-    auto       version          = parse_package_version(package_value, version_optional);
+    auto       version = parse_package_version(rstd::move(package_value.version), version_optional);
     if (version.is_err()) return Err(rstd::move(version).unwrap_err());
-    auto license = parse_package_license(package_value);
+    auto license = parse_package_license(rstd::move(package_value.license));
     if (license.is_err()) return Err(rstd::move(license).unwrap_err());
-    auto authors = parse_package_authors(package_value);
+    auto authors = parse_package_authors(rstd::move(package_value.authors));
     if (authors.is_err()) return Err(rstd::move(authors).unwrap_err());
-    auto description = parse_package_metadata(package_value, "description"_str);
+    auto description =
+        parse_package_metadata(rstd::move(package_value.description), "description"_str);
     if (description.is_err()) return Err(rstd::move(description).unwrap_err());
-    auto repository = parse_package_metadata(package_value, "repository"_str);
+    auto repository =
+        parse_package_metadata(rstd::move(package_value.repository), "repository"_str);
     if (repository.is_err()) return Err(rstd::move(repository).unwrap_err());
-    auto documentation = parse_package_metadata(package_value, "documentation"_str);
+    auto documentation =
+        parse_package_metadata(rstd::move(package_value.documentation), "documentation"_str);
     if (documentation.is_err()) return Err(rstd::move(documentation).unwrap_err());
-    auto readme = parse_package_readme(package_value, root.as_path(), embedded_source);
+    auto readme =
+        parse_package_readme(rstd::move(package_value.readme), root.as_path(), embedded_source);
     if (readme.is_err()) return Err(rstd::move(readme).unwrap_err());
-    auto publish = parse_package_publish(package_value);
+    auto publish = parse_package_publish(rstd::move(package_value.publish));
     if (publish.is_err()) return Err(rstd::move(publish).unwrap_err());
 
-    auto usage = parse_usage(member(document, "usage"_str),
-                             source_root->as_path(),
-                             "manifest.usage"_str,
-                             embedded_source);
+    auto usage = parse_usage(
+        rstd::move(input.usage), source_root->as_path(), "manifest.usage"_str, embedded_source);
     auto conditions =
-        parse_conditional_configurations(member(document, "when"_str), source_root->as_path());
-    auto features         = parse_features(member(document, "features"_str));
-    auto dependencies     = parse_dependencies(member(document, "dependencies"_str));
-    auto dev_dependencies = parse_dependencies(member(document, "dev-dependencies"_str), true);
-    auto runtime_dependencies =
-        parse_runtime_dependencies(member(document, "runtime-dependencies"_str));
-    auto build_tools   = parse_build_tools(member(document, "build-tools"_str));
-    auto source_groups = parse_source_groups(member(document, "source-groups"_str));
+        parse_conditional_configurations(rstd::move(input.when), source_root->as_path());
+    auto features             = parse_features(rstd::move(input.features));
+    auto dependencies         = parse_dependencies(rstd::move(input.dependencies));
+    auto dev_dependencies     = parse_dependencies(rstd::move(input.dev_dependencies), true);
+    auto runtime_dependencies = parse_runtime_dependencies(rstd::move(input.runtime_dependencies));
+    auto build_tools          = parse_build_tools(rstd::move(input.build_tools));
+    auto source_groups        = parse_source_groups(rstd::move(input.source_groups));
     auto external_sources =
-        parse_package_external_sources(member(document, "external-sources"_str), root.as_path());
-    auto external = parse_external_dependencies(member(document, "external-dependencies"_str));
-    auto target = parse_target_predicate(member(package_value, "target"_str), "package.target"_str);
+        parse_package_external_sources(rstd::move(input.external_sources), root.as_path());
+    auto external = parse_external_dependencies(rstd::move(input.external_dependencies));
+    auto target   = parse_target_predicate(rstd::move(package_value.target), "package.target"_str);
     if (usage.is_err()) return Err(rstd::move(usage).unwrap_err());
     if (conditions.is_err()) return Err(rstd::move(conditions).unwrap_err());
     if (features.is_err()) return Err(rstd::move(features).unwrap_err());
@@ -655,7 +593,7 @@ auto assemble_manifest_document(PathBuf                               root,
             if (! has_source_group(group.as_str())) {
                 return manifest_schema_failure<ManifestDocument>(
                     rstd::format("target '{}::{}' references unknown source group '{}'",
-                                 name->as_str(),
+                                 name.as_str(),
                                  package_target_name(manifest_target),
                                  group.as_str()));
             }
@@ -665,7 +603,7 @@ auto assemble_manifest_document(PathBuf                               root,
                 if (! has_source_group(group.as_str())) {
                     return manifest_schema_failure<ManifestDocument>(rstd::format(
                         "target '{}::{}' condition '{}' references unknown source group '{}'",
-                        name->as_str(),
+                        name.as_str(),
                         package_target_name(manifest_target),
                         conditional.source.as_str(),
                         group.as_str()));
@@ -698,12 +636,12 @@ auto assemble_manifest_document(PathBuf                               root,
         }
         dependency.declaration_root = Some(root.clone());
     }
-    auto profile = rstd_try(parse_project_profile(member(document, "profile"_str)));
+    auto profile = rstd_try(parse_project_profile(rstd::move(input.profile)));
 
     return Ok(ManifestDocument {
         .kind    = ManifestKind::Package,
         .package = Some(PackageManifest {
-            .name                       = rstd::move(name).unwrap(),
+            .name                       = rstd::move(name),
             .version                    = rstd::move(version).unwrap(),
             .license                    = rstd::move(license).unwrap(),
             .authors                    = rstd::move(authors).unwrap(),
